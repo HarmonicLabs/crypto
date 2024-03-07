@@ -591,6 +591,12 @@ export const Fp12_finalExponentiate = (num: Fp12) => {
   return Fp12.mul(Fp12.mul(Fp12.mul(t2_t5_pow_q2, t4_t1_pow_q3), t6_t1c_pow_q1), t7_t3c_t1);
 }
 
+export const Fp12_conjugate = ({ c0, c1 }: Fp12): Fp12 => ({ c0, c1: Fp6.neg(c1) });
+
+export const Fp12_eql = ({ c0, c1 }: Fp12, { c0: r0, c1: r1 }: Fp12) => Fp6.eql(c0, r0) && Fp6.eql(c1, r1);
+
+export const Fp12_ONE = { c0: Fp6.ONE, c1: Fp6.ZERO };
+
 export const Fp12: mod.IField<Fp12> & Fp12Utils = {
   ORDER: Fp2.ORDER, // TODO: unused, but need to verify
   BITS: 2 * Fp2.BITS,
@@ -602,7 +608,7 @@ export const Fp12: mod.IField<Fp12> & Fp12Utils = {
   isValid: ({ c0, c1 }) => Fp6.isValid(c0) && Fp6.isValid(c1),
   is0: ({ c0, c1 }) => Fp6.is0(c0) && Fp6.is0(c1),
   neg: ({ c0, c1 }) => ({ c0: Fp6.neg(c0), c1: Fp6.neg(c1) }),
-  eql: ({ c0, c1 }, { c0: r0, c1: r1 }) => Fp6.eql(c0, r0) && Fp6.eql(c1, r1),
+  eql: Fp12_eql,
   sqrt: () => {
     throw new Error('Not implemented');
   },
@@ -677,7 +683,7 @@ export const Fp12: mod.IField<Fp12> & Fp12Utils = {
     c0: Fp6.multiplyByFp2(c0, rhs),
     c1: Fp6.multiplyByFp2(c1, rhs),
   }),
-  conjugate: ({ c0, c1 }): Fp12 => ({ c0, c1: Fp6.neg(c1) }),
+  conjugate: Fp12_conjugate,
 
   // A cyclotomic group is a subgroup of Fp^n defined by
   //   GΦₙ(p) = {α ∈ Fpⁿ : α^Φₙ(p) = 1}

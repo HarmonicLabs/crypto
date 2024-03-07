@@ -1,4 +1,4 @@
-import { Fp, Fp12, Fp12Multiply, Fp12_finalExponentiate, Fp2, G1_mapToCurve, G2_mapToCurve, bls12_381 } from "./noble";
+import { Fp, Fp12, Fp12Multiply, Fp12_ONE, Fp12_conjugate, Fp12_eql, Fp12_finalExponentiate, Fp2, G1_mapToCurve, G2_mapToCurve, bls12_381 } from "./noble";
 import { H2CPointConstructor, createHasher } from "./noble/abstract/hash-to-curve";
 import { bitGet, bitLen } from "./noble/abstract/utils";
 import { AffinePoint, ProjConstructor } from "./noble/abstract/weierstrass";
@@ -214,8 +214,8 @@ type Fp6_t = {
 
 export function bls12_381_millerLoop( g1: BlsG1, g2: BlsG2 ): BlsResult
 {
-    const Qa = g1.toAffine();
-    return millerLoop(pairingPrecomputes(g2), [Qa.x, Qa.y]);
+    const { x, y } = g1.toAffine();
+    return millerLoop(pairingPrecomputes(g2), [ x, y ]);
 }
 
 export function bls12_381_mulMlResult( a: BlsResult, b: BlsResult ): BlsResult
@@ -225,5 +225,10 @@ export function bls12_381_mulMlResult( a: BlsResult, b: BlsResult ): BlsResult
 
 export function bls12_381_finalVerify( a: BlsResult, b: BlsResult ): boolean
 {
-    Fp12_finalExponentiate; // ?? 
+    // blst implementation https://github.com/supranational/blst/blob/0d46eefa45fc1e57aceb42bba0e84eab3a7a9725/src/aggregate.c#L506
+    const GT = Fp12_conjugate( a );
+    const multiplied = Fp12Multiply( GT, b );
+    const result = Fp12_finalExponentiate( multiplied );
+
+    return Fp12_eql( result, Fp12_ONE );
 }
