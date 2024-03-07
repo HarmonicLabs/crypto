@@ -12,3 +12,14 @@ export function assert( condition: boolean, errorMessage: string | Error , addIn
 
     throw new Error( errorMessage );
 }
+
+// keccak asserts
+export function assertPostiveInteger( n: any ): void
+{
+    if (!Number.isSafeInteger(n) || n < 0) throw new Error(`positive integer expected, not ${n}`);
+}
+
+export function assertBytes( stuff: any ): void
+{
+    if(!( stuff instanceof Uint8Array )) throw new Error("Uint8Array expected");
+}

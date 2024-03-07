@@ -76,7 +76,7 @@ function sigma1(x: number ): number
  * @param {uint5[]} bytes - list of uint8 numbers
  * @returns {number[]} - list of uint8 numbers
  */
-export function sha2_256( bytes: byte[] | Uint8Array ):  byte[]
+export function sha2_256( bytes: byte[] | Uint8Array ): Uint8Array
 {
     if( isUint8Array( bytes ) )
     {
@@ -168,5 +168,5 @@ export function sha2_256( bytes: byte[] | Uint8Array ):  byte[]
         result.push( ((item >>  0) & 0xff) as byte );
     }
 
-    return result as any;
+    return new Uint8Array( result );
 }
