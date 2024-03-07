@@ -12,7 +12,7 @@ function hexToBytes( hex: string ): byte[]
     return Array.from<byte>( uint8array.fromHex( hex ) as any );
 }
 
-function bytesToHex( bytes: byte[] ): string
+function bytesToHex( bytes: byte[] | Uint8Array ): string
 {
     return uint8array.toHex( new Uint8Array( bytes ) );
 }

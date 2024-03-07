@@ -14,8 +14,8 @@ this repo targets ES5+
 
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 // Abelian group utilities
-import { IField, validateField, nLength } from './modular.js';
-import { validateObject } from './utils.js';
+import { IField, validateField, nLength } from './modular';
+import { validateObject } from './utils';
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 

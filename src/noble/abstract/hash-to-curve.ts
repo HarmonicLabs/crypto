@@ -14,9 +14,9 @@ this repo targets ES5+
 
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 import type { Group, GroupConstructor, AffinePoint } from './curve';
-import { mod, IField } from './modular.js';
-import type { CHash } from './utils.js';
-import { bytesToNumberBE, abytes, concatBytes, utf8ToBytes, validateObject } from './utils.js';
+import { mod, IField } from './modular';
+import type { CHash } from './utils';
+import { bytesToNumberBE, abytes, concatBytes, utf8ToBytes, validateObject } from './utils';
 
 /**
  * * `DST` is a domain separation tag, defined in section 2.2.5

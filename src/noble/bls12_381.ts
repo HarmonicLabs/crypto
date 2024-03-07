@@ -1046,7 +1046,7 @@ const htfDefaults = Object.freeze({
 // Compressed point of infinity
 const COMPRESSED_ZERO = setMask(Fp.toBytes(_0n), { infinity: true, compressed: true }); // set compressed & point-at-infinity bits
 
-function parseMask(bytes: Uint8Array) {
+export function parseMask(bytes: Uint8Array) {
   // Copy, so we can remove mask data. It will be removed also later, when Fp.create will call modulo.
   bytes = bytes.slice();
   const mask = bytes[0] & 0b1110_0000;

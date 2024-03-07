@@ -137,7 +137,7 @@ export function ensureBytes(title: string, hex: Hex, expectedLength?: number): U
       throw new Error(`${title} must be valid hex string, got "${hex}". Cause: ${e}`);
     }
   } else if (isBytes(hex)) {
-    // Uint8Array.from() instead of hash.slice() because node.js Buffer
+    // Uint8Array.from() instead of hash.slice() because node Buffer
     // is instance of Uint8Array, and its slice() creates **mutable** copy
     res = Uint8Array.from(hex);
   } else {
@@ -176,7 +176,7 @@ export function equalBytes(a: Uint8Array, b: Uint8Array) {
   return diff === 0;
 }
 
-// Global symbols in both browsers and Node.js since v11
+// Global symbols in both browsers and Node since v11
 // See https://github.com/microsoft/TypeScript/issues/31535
 declare const TextEncoder: any;
 

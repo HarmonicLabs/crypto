@@ -1,4 +1,4 @@
-import { Fp, Fp12, Fp12Multiply, Fp12_ONE, Fp12_conjugate, Fp12_eql, Fp12_finalExponentiate, Fp2, G1_mapToCurve, G2_mapToCurve, bls12_381 } from "./noble";
+import { Fp, Fp12, Fp12Multiply, Fp12_ONE, Fp12_conjugate, Fp12_eql, Fp12_finalExponentiate, Fp2, G1_mapToCurve, G2_mapToCurve, bls12_381, parseMask } from "./noble";
 import { H2CPointConstructor, createHasher } from "./noble/abstract/hash-to-curve";
 import { bitGet, bitLen } from "./noble/abstract/utils";
 import { AffinePoint, ProjConstructor } from "./noble/abstract/weierstrass";
@@ -81,6 +81,24 @@ export function bls12_381_G1_compress( elem: BlsG1 ): Uint8Array
 
 export function bls12_381_G1_uncompress( compressed: Uint8Array ): BlsG1
 {
+    const { compressed: compressed_bit, infinity, sort, value } = parseMask( compressed );
+
+    // point zero edge case
+    if(
+        compressed_bit &&
+        infinity &&
+        sort &&
+        value.every( n => n === 0 )
+    ) throw new Error(
+        "sign bit set on pont ZERO, we don't like it"
+    );
+
+    // not compressed bytes would be totally fine for the library but we artificially fail here
+    // https://github.com/IntersectMBO/plutus/blob/master/plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/bls12_381_G1_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed.uplc
+    if( !compressed_bit ) throw new Error(
+        "uncompress only works with compressed byets"
+    );
+
     return BlsG1.fromHex( compressed );
 }
 
@@ -119,8 +137,38 @@ export function bls12_381_G2_compress( elem: BlsG2 ): Uint8Array
 
 export function bls12_381_G2_uncompress( compressed: Uint8Array ): BlsG2
 {
+    const { compressed: compressed_bit } = parseMask( compressed );
+
+    // not compressed bytes would be totally fine for the library but we artificially fail here
+    // https://github.com/IntersectMBO/plutus/blob/master/plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/bls12_381_G2_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed.uplc
+    if( !compressed_bit ) throw new Error(
+        "uncompress only works with compressed byets"
+    );
+    
     return BlsG2.fromHex( compressed );
 }
+
+export function bls12_381_millerLoop( g1: BlsG1, g2: BlsG2 ): BlsResult
+{
+    const { x, y } = g1.toAffine();
+    return millerLoop(pairingPrecomputes(g2), [ x, y ]);
+}
+
+export function bls12_381_mulMlResult( a: BlsResult, b: BlsResult ): BlsResult
+{
+    return Fp12Multiply( a, b );
+}
+
+export function bls12_381_finalVerify( a: BlsResult, b: BlsResult ): boolean
+{
+    // blst implementation https://github.com/supranational/blst/blob/0d46eefa45fc1e57aceb42bba0e84eab3a7a9725/src/aggregate.c#L506
+    let GT = Fp12_conjugate( a );
+    GT = Fp12Multiply( GT, b );
+    GT = Fp12_finalExponentiate( GT );
+
+    return Fp12_eql( GT, Fp12_ONE );
+}
+
 
 // The BLS parameter x for BLS12-381
 const BLS_X = BigInt('0xd201000000010000');
@@ -210,25 +258,4 @@ type Fp6_t = {
     c0: Fp2;
     c1: Fp2;
     c2: Fp2;
-}
-
-export function bls12_381_millerLoop( g1: BlsG1, g2: BlsG2 ): BlsResult
-{
-    const { x, y } = g1.toAffine();
-    return millerLoop(pairingPrecomputes(g2), [ x, y ]);
-}
-
-export function bls12_381_mulMlResult( a: BlsResult, b: BlsResult ): BlsResult
-{
-    return Fp12Multiply( a, b );
-}
-
-export function bls12_381_finalVerify( a: BlsResult, b: BlsResult ): boolean
-{
-    // blst implementation https://github.com/supranational/blst/blob/0d46eefa45fc1e57aceb42bba0e84eab3a7a9725/src/aggregate.c#L506
-    const GT = Fp12_conjugate( a );
-    const multiplied = Fp12Multiply( GT, b );
-    const result = Fp12_finalExponentiate( multiplied );
-
-    return Fp12_eql( result, Fp12_ONE );
 }

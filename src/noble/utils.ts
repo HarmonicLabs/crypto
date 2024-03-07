@@ -117,7 +117,7 @@ export async function asyncLoop(iters: number, tick: number, cb: (i: number) => 
     }
 }
 
-// Global symbols in both browsers and Node.js since v11
+// Global symbols in both browsers and Node since v11
 // See https://github.com/microsoft/TypeScript/issues/31535
 declare const TextEncoder: any;
 
