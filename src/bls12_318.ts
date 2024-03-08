@@ -7,10 +7,37 @@ import { sha256 } from "./noble/sha256";
 export const BlsG1 = bls12_381.G1.ProjectivePoint;
 export const BlsG2 = bls12_381.G2.ProjectivePoint;
 
+export function isBlsG1( stuff: any ): stuff is BlsG1
+{
+    return stuff instanceof BlsG1 && (
+        typeof stuff.px === "bigint" &&
+        typeof stuff.py === "bigint" &&
+        typeof stuff.pz === "bigint"
+    );
+}
+
+export function isBlsG2( stuff: any ): stuff is BlsG2
+{
+    return stuff instanceof BlsG2 && (
+        isFp2( stuff.px ) &&
+        isFp2( stuff.py ) &&
+        isFp2( stuff.pz )
+    );
+}
+
 type UnwrapProjConstructor<Stuff extends ProjConstructor<any>> =
     Stuff extends ProjConstructor<infer T> ? T : never;
 
 export type Fp2 = UnwrapProjConstructor<typeof BlsG2>;
+
+export function isFp2( stuff: any ): stuff is Fp2
+{
+    return typeof stuff === "object" && (
+        stuff !== null && !Array.isArray( stuff ) &&
+        typeof stuff.c0 === "bigint" &&
+        typeof stuff.c1 === "bigint"
+    );
+}
 
 type ConstructorReturnType<CtorLike extends { new( ...args: any ): any }> =
     CtorLike extends { new( ...args: any ): infer ReturnT } ? ReturnT :
@@ -274,8 +301,27 @@ type BlsResult = {
     c1: Fp6_t,
 };
 
+export function isBlsResult( stuff: any ): stuff is BlsResult
+{
+    return typeof stuff === "object" && (
+        stuff !== null && !Array.isArray( stuff ) &&
+        isFp6( stuff.c0 ) &&
+        isFp6( stuff.c1 )
+    );
+}
+
 type Fp6_t = {
     c0: Fp2;
     c1: Fp2;
     c2: Fp2;
+}
+
+export function isFp6( stuff: any ): stuff is Fp6_t
+{
+    return typeof stuff === "object" && (
+        stuff !== null && !Array.isArray( stuff ) &&
+        isFp2( stuff.c0 ) &&
+        isFp2( stuff.c1 ) &&
+        isFp2( stuff.c2 )
+    );
 }
