@@ -296,7 +296,7 @@ function millerLoop(ell: [Fp2, Fp2, Fp2][], g1: [bigint, bigint])
     return Fp12.conjugate(f12);
 }
 
-type BlsResult = {
+export type BlsResult = {
     c0: Fp6_t,
     c1: Fp6_t,
 };
