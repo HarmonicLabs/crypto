@@ -277,7 +277,7 @@ describe("src/crypto", () => {
             expect( keccak_256(new Uint8Array([])) ).toEqual( fromHex("C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470") )
         });
 
-        test("empty", () => {
+        test("bit len 200", () => {
             expect( keccak_256( fromHex("AAFDC9243D3D4A096558A360CC27C8D862F0BE73DB5E88AA55")) ).toEqual( fromHex("6FFFA070B865BE3EE766DC2DB49B6AA55C369F7DE3703ADA2612D754145C01E6") )
         });
     });
