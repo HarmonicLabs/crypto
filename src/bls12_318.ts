@@ -19,6 +19,8 @@ type ConstructorReturnType<CtorLike extends { new( ...args: any ): any }> =
 export type BlsG1 = ConstructorReturnType<typeof BlsG1>;
 export type BlsG2 = ConstructorReturnType<typeof BlsG2>;
 
+const curveOrder = BigInt("52435875175126190479447740508185965837690552500527637822603658699938581184513");
+
 const htfDefaults = Object.freeze({
     // DST: a domain separation tag
     // defined in section 2.2.5
@@ -48,6 +50,8 @@ const G1_Hasher = createHasher(BlsG1, G1_mapToCurve, { ...htfDefaults, m: 1, DST
 
 export function bls12_381_G1_add( a: BlsG1, b: BlsG1 ): BlsG1
 {
+    // if( bls12_381_G1_equal( a, BlsG1.ZERO ) ) return b;
+    // if( bls12_381_G1_equal( b, BlsG1.ZERO ) ) return a;
     return a.add( b );
 }
 
@@ -58,7 +62,11 @@ export function bls12_381_G1_neg( elem: BlsG1 ): BlsG1
 
 export function bls12_381_G1_scalarMul( n: number | bigint, g1: BlsG1 ): BlsG1
 {
-    return g1.multiply( BigInt( n ) );
+    if( n < 0 ) return bls12_381_G1_scalarMul( -n, bls12_381_G1_neg( g1 ) );
+    n = BigInt( n );
+    if( n >= curveOrder ) n = n % curveOrder;
+    if( n === BigInt( 0 ) ) return BlsG1.ZERO;
+    return g1.multiply( n );
 }
 
 export function bls12_381_G1_equal( a: BlsG1, b: BlsG1 ): boolean
@@ -68,6 +76,9 @@ export function bls12_381_G1_equal( a: BlsG1, b: BlsG1 ): boolean
 
 export function bls12_381_G1_hashToGroup( a: Uint8Array, b: Uint8Array ): BlsG1
 {
+    // noble-curves can handle that but the plutus-machine doesn't
+    // so we artificially throw an error here
+    if( b.length > 255 ) throw new Error("DST length can not be greater than 255");
     return BlsG1.fromAffine(
         G1_Hasher.hashToCurve( a, { DST: b })
         .toAffine()
@@ -104,6 +115,8 @@ export function bls12_381_G1_uncompress( compressed: Uint8Array ): BlsG1
 
 export function bls12_381_G2_add( a: BlsG2, b: BlsG2 ): BlsG2
 {
+    // if( bls12_381_G2_equal( a, BlsG2.ZERO ) ) return b;
+    // if( bls12_381_G2_equal( b, BlsG2.ZERO ) ) return a;
     return a.add( b );
 }
 
@@ -114,6 +127,10 @@ export function bls12_381_G2_neg( elem: BlsG2 ): BlsG2
 
 export function bls12_381_G2_scalarMul( n: number | bigint, g2: BlsG2 ): BlsG2
 {
+    if( n < 0 ) return bls12_381_G2_scalarMul( -n, bls12_381_G2_neg( g2 ) );
+    n = BigInt( n );
+    if( n >= curveOrder ) n = n % curveOrder;
+    if( n === BigInt( 0 ) ) return BlsG2.ZERO;
     return g2.multiply( BigInt( n ) );
 }
 
@@ -124,6 +141,9 @@ export function bls12_381_G2_equal( a: BlsG2, b: BlsG2 ): boolean
 
 export function bls12_381_G2_hashToGroup( a: Uint8Array, b: Uint8Array ): BlsG2
 {
+    // noble-curves can handle that but the plutus-machine doesn't
+    // so we artificially throw an error here
+    if( b.length > 255 ) throw new Error("DST length can not be greater than 255");
     return BlsG2.fromAffine(
         G2_Hasher.hashToCurve( a, { DST: b })
         .toAffine()
