@@ -1,6 +1,8 @@
 import  { encodeBech32, byte, decodeBech32, isBech32, sha2_512, sha3, blake2b, sha2_256, blake2b_224, blake2b_256, signEd25519 } from "..";
 import blake2 from "blake2";
 import * as uint8array from "@harmoniclabs/uint8array-utils";
+import { keccak_256 } from "../";
+import { fromHex } from "@harmoniclabs/uint8array-utils";
 
 function textToBytes( text: string ): byte[]
 {
@@ -91,7 +93,11 @@ describe("src/crypto", () => {
         test('sha2_256(textToBytes("Hello, World!")) => [223, 253, 96, 33, 187, 43, 213, 176, 175, 103, 98, 144, 128, 158, 195, 165, 49, 145, 221, 129, 199, 247, 10, 75, 40, 104, 138, 54, 33, 130, 152, 111]', () => {
             expect(
                 sha2_256(textToBytes("Hello, World!"))
-            ).toEqual( [223, 253, 96, 33, 187, 43, 213, 176, 175, 103, 98, 144, 128, 158, 195, 165, 49, 145, 221, 129, 199, 247, 10, 75, 40, 104, 138, 54, 33, 130, 152, 111] )
+            ).toEqual(
+                new Uint8Array(
+                    [223, 253, 96, 33, 187, 43, 213, 176, 175, 103, 98, 144, 128, 158, 195, 165, 49, 145, 221, 129, 199, 247, 10, 75, 40, 104, 138, 54, 33, 130, 152, 111]
+                )
+            )
         });
 
     });
@@ -264,6 +270,16 @@ describe("src/crypto", () => {
             );
             
         })
+    });
+
+    describe.only("keccak_256", () => {
+        test("empty", () => {
+            expect( keccak_256(new Uint8Array([])) ).toEqual( fromHex("C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470") )
+        });
+
+        test("empty", () => {
+            expect( keccak_256( fromHex("AAFDC9243D3D4A096558A360CC27C8D862F0BE73DB5E88AA55")) ).toEqual( fromHex("6FFFA070B865BE3EE766DC2DB49B6AA55C369F7DE3703ADA2612D754145C01E6") )
+        });
     });
 
 });

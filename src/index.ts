@@ -7,3 +7,4 @@ export * from "./sha3";
 export * from "./types";
 export * from "./utils";
 export * from "./bls12_318";
+export * from "./keccak";
