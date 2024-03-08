@@ -272,7 +272,7 @@ describe("src/crypto", () => {
         })
     });
 
-    describe.only("keccak_256", () => {
+    describe("keccak_256", () => {
         test("empty", () => {
             expect( keccak_256(new Uint8Array([])) ).toEqual( fromHex("C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470") )
         });
