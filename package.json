@@ -1,6 +1,6 @@
 {
   "name": "@harmoniclabs/crypto",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "collection of cryptographic functions that support every js runtime for ES5+",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

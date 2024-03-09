@@ -206,6 +206,8 @@ export function bls12_381_mulMlResult( a: BlsResult, b: BlsResult ): BlsResult
     return Fp12Multiply( a, b );
 }
 
+export const bls12_381_eqMlResult: ( a: BlsResult, b: BlsResult ) => boolean = Fp12_eql;
+
 export function bls12_381_finalVerify( a: BlsResult, b: BlsResult ): boolean
 {
     // blst implementation https://github.com/supranational/blst/blob/0d46eefa45fc1e57aceb42bba0e84eab3a7a9725/src/aggregate.c#L506
