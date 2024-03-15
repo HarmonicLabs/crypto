@@ -1,4 +1,4 @@
-import type { byte, uint64 as uint64_t } from "./types";
+import { byte, uint64 as uint64_t } from "./types";
 import { uint64, forceUint64, uint64Rotr, byteArrToHex, uint64ToBytesBE } from "./types";
 
 
@@ -91,8 +91,9 @@ const _sha2_512_k: readonly uint64_t[] = Object.freeze([
  * @param {number[]} bytes - list of uint8 numbers
  * @returns {number[]} - list of uint8 numbers
  */
-export function sha2_512( bytes: byte[] ): byte[]
+export function sha2_512( bytes: byte[] | Uint8Array ): Uint8Array
 {
+    if( bytes instanceof Uint8Array ) bytes = Array.from( bytes ) as byte[];
     // initial has; updated later
     const hash: uint64_t[] = [
         uint64( "0x6a09e667f3bcc908" ),
@@ -182,5 +183,5 @@ export function sha2_512( bytes: byte[] ): byte[]
         result.push( ...uint64ToBytesBE( hash[i] ) );
     }
 
-    return result;
+    return new Uint8Array( result );
 }

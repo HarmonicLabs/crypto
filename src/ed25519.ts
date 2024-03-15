@@ -92,7 +92,7 @@ function recoverX( y: bigint ): bigint
  * Curve point 'addition'
  * Note: this is probably the bottleneck of this Ed25519 implementation
  */
-function edwards(a: Readonly<bigpoint>, b: Readonly<bigpoint>): bigpoint
+export function addPointsEdwards(a: Readonly<bigpoint>, b: Readonly<bigpoint>): bigpoint
 {
     const x1 = a[0];
     const y1 = a[1];
@@ -104,15 +104,15 @@ function edwards(a: Readonly<bigpoint>, b: Readonly<bigpoint>): bigpoint
     return [positiveMod(x3, Q), positiveMod(y3, Q)];
 }
 
-function scalarMul(point: Readonly<bigpoint>, n: bigint): bigpoint
+export function scalarMul(point: Readonly<bigpoint>, n: bigint): bigpoint
 {
     if (n === BigInt( 0 )) {
         return [BigInt( 0 ), BigInt( 1 )];
     } else {
         let sum = scalarMul(point, n/BigInt( 2 ));
-        sum = edwards(sum, sum);
+        sum = addPointsEdwards(sum, sum);
         if ((n % BigInt( 2 )) !== BigInt( 0 )) {
-            sum = edwards(sum, point);
+            sum = addPointsEdwards(sum, point);
         }
 
         return sum;
@@ -122,7 +122,7 @@ function scalarMul(point: Readonly<bigpoint>, n: bigint): bigpoint
 /**
  * Curve point 'multiplication'
  */
-function encodeInt(y: bigint): byte[] {
+export function encodeInt(y: bigint): byte[] {
     let bytes = Array.from( bigintToBuffer(y) ).reverse() as byte[];
     
     while (bytes.length < 32)
@@ -133,13 +133,13 @@ function encodeInt(y: bigint): byte[] {
     return bytes;
 }
 
-function decodeInt(s: byte[]): bigint {
+function decodeInt(s: byte[] | Uint8Array): bigint {
     return BigInt(
         "0x" + byteArrToHex( s.reverse() )
     );
 }
 
-function encodePoint(point: bigpoint): byte[] {
+function bigpointToByteArray(point: bigpoint): byte[] {
     const [x, y] = point;
 
     let bytes = encodeInt(y);
@@ -148,6 +148,11 @@ function encodePoint(point: bigpoint): byte[] {
     bytes[31] = ((bytes[31] & 0b011111111) | (Number(x & BigInt( 1 )) * 0b10000000)) as byte;
 
     return bytes;
+}
+
+export function bigpointToUint8Array( point: bigpoint ): Uint8Array
+{
+    return new Uint8Array( bigpointToByteArray( point ) );
 }
 
 function getBit(bytes: byte[], i: number): 0 | 1
@@ -164,8 +169,9 @@ function isOnCurve(point: bigpoint): boolean
     return (-xx + yy - BigInt( 1 ) - D*xx*yy) % Q == BigInt( 0 );
 }
 
-function decodePoint(s: byte[])
+export function pointFromBytes(s: byte[] | Uint8Array): bigpoint
 {
+    if( s instanceof Uint8Array ) s = asBytes( s );
     assert(s.length == 32, "point must have length of 32");
 
     const bytes = s.slice();
@@ -187,15 +193,15 @@ function decodePoint(s: byte[])
     return point;
 }
 
-function getA(h: byte[]): bigint
-{
-    const a = BigInt( "28948022309329048855892746252171976963317496166410141009864396001978282409984" ); // ipow2(253)
+const ipow2_253 = BigInt( "28948022309329048855892746252171976963317496166410141009864396001978282409984" ); // ipow2(253)
 
+export function scalarFromBytes(h: byte[] | Uint8Array): bigint
+{
     const bytes = h.slice(0, 32);
     bytes[0]  = (bytes[ 0  ] & 0b11111000) as byte;
     bytes[31] = (bytes[ 31 ] & 0b00111111) as byte;
 
-    return a + BigInt( 
+    return ipow2_253 + BigInt( 
         "0x" + byteArrToHex( bytes.reverse() )
     );
 }
@@ -213,13 +219,27 @@ function forceUint8Array( stuff: Uint8ArrayLike ): Uint8Array
     return isUint8Array( stuff ) ? stuff : new Uint8Array( stuff )
 }
 
+export function scalarMultBase( scalar: bigint ): bigpoint
+{
+    return scalarMul(BASE, scalar);
+}
+
 export function deriveEd25519PublicKey(privateKey: byte[]): byte[]
 {
-    const privateKeyHash = sha2_512(privateKey);
-    const a = getA(privateKeyHash);
+    const extended = sha2_512(privateKey);
+    const a = scalarFromBytes(extended);
     const A = scalarMul(BASE, a);
 
-    return encodePoint(A);
+    return bigpointToByteArray(A);
+}
+
+export function extendedToPublic( extended: Uint8Array | byte[] ): Uint8Array
+{
+    if( extended instanceof Uint8Array ) extended = Array.from( extended ) as byte[];
+    const a = scalarFromBytes(extended);
+    const A = scalarMul(BASE, a);
+
+    return new Uint8Array( bigpointToByteArray(A) );
 }
 
 function asBytes( stuff: Uint8ArrayLike ): byte[]
@@ -228,27 +248,67 @@ function asBytes( stuff: Uint8ArrayLike ): byte[]
     return Array.from( stuff ) as byte[]
 }
 
-export function signEd25519( message: Uint8ArrayLike, privateKey: Uint8ArrayLike ): [ pubKey: Uint8Array, signature: Uint8Array ]
+export interface SignEd25519Result {
+    0: Uint8Array, // pubKey
+    1: Uint8Array, // signature
+    /** to be `ArrayLike` */
+    length: 2,
+    // to allow array destructuring
+    [Symbol.iterator]: () => Generator<Uint8Array, void, unknown>,
+    pubKey: Uint8Array,
+    signature: Uint8Array,
+}
+
+export function signEd25519(
+    message: Uint8ArrayLike,
+    privateKey: Uint8ArrayLike
+): SignEd25519Result
 {
     message = forceUint8Array( message );
     privateKey = forceUint8Array( privateKey );
 
-    const privateKeyHash = sha2_512( asBytes( privateKey ) );
-    const a = getA(privateKeyHash);
+    return signExtendedEd25519( message, sha2_512( asBytes( privateKey ) ) );
+}
+
+export function signExtendedEd25519(
+    message: Uint8ArrayLike,
+    extendedKey: Uint8ArrayLike
+): SignEd25519Result
+{
+    message = forceUint8Array( message );
+    extendedKey = forceUint8Array( extendedKey );
+
+    if( extendedKey.length !== 64 )
+    throw new Error('signExtendedEd25519:: extended key must have length 64');
+
+    const privateKeyHash = asBytes( extendedKey );
+    const a = scalarFromBytes(privateKeyHash);
 
     // for convenience getulate publicKey here:
-    const publicKey = encodePoint(scalarMul(BASE, a));
+    const publicKey = bigpointToByteArray(scalarMul(BASE, a));
 
     const r = ihash(privateKeyHash.slice(32, 64).concat( asBytes( message ) ) );
     const R = scalarMul(BASE, r);
-    const S = positiveMod(r + ihash(encodePoint(R).concat(publicKey).concat(asBytes( message )))*a, CURVE_ORDER);
+    const S = positiveMod(r + ihash(bigpointToByteArray(R).concat(publicKey).concat(asBytes( message )))*a, CURVE_ORDER);
 
-    return [ new Uint8Array( publicKey ), new Uint8Array( encodePoint(R).concat(encodeInt(S) ) ) ];
+    const pubKey = new Uint8Array( publicKey );
+    const signature = new Uint8Array( bigpointToByteArray(R).concat(encodeInt(S) ) );
+    return {
+        0: pubKey,
+        1: signature,
+        length: 2,
+        [Symbol.iterator]: function* () {
+            yield pubKey;
+            yield signature;
+        },
+        pubKey,
+        signature
+    };
 }
 
 export function getEd25519Signature( message: Uint8ArrayLike, privateKey: Uint8ArrayLike ): Uint8Array
 {
-    return signEd25519( message, privateKey )[1];
+    return signEd25519( message, privateKey ).signature;
 }
 
 export function verifyEd25519Signature(signature: Uint8ArrayLike, message: Uint8ArrayLike, publicKey: Uint8ArrayLike): boolean
@@ -273,13 +333,29 @@ export function verifyEd25519Signature(signature: Uint8ArrayLike, message: Uint8
         publicKey = buffToByteArr( publicKey );
     }
 
-    const R = decodePoint( asBytes( signature ).slice(0, 32));
-    const A = decodePoint( asBytes( publicKey ));
-    const S = decodeInt( asBytes( signature ).slice(32, 64));
+    const R = pointFromBytes( asBytes( signature ).slice(0, 32));
+    const A = pointFromBytes( asBytes( publicKey ));
+    const S = decodeInt( asBytes( signature ).slice(32, 64) );
     const h = ihash( asBytes( signature ).slice(0, 32).concat( asBytes( publicKey ) ).concat( asBytes( message ) ));
 
     const left = scalarMul(BASE, S);
-    const right = edwards(R, scalarMul(A, h));
+    const right = addPointsEdwards(R, scalarMul(A, h));
 
     return (left[0] == right[0]) && (left[1] == right[1]);
+}
+
+const _0n = BigInt( 0 );
+
+const ED25519_ORDER = BigInt(
+    '57896044618658097711785492504343953926634992332820282019728792003956564819949'
+);
+
+function mod(a: bigint, b: bigint): bigint {
+    const result = a % b;
+    return result >= _0n ? result : b + result;
+}
+
+export function ed25519bigint( n: bigint ): bigint
+{
+    return mod( n , ED25519_ORDER );
 }

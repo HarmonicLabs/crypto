@@ -94,8 +94,9 @@ export function buffToByteArr( buff: Uint8Array ): byte[]
     return Array.from( buff ) as any;
 }
 
-export function byteArrToHex( bytes: byte[] ): string
+export function byteArrToHex( bytes: byte[] | Uint8Array ): string
 {
+    if( bytes instanceof Uint8Array ) bytes = Array.from( bytes ) as byte[];
     return bytes.reduce( (acc, val) => acc + val.toString(16).slice(0,2).padStart(2,'0') , '' )
 }
 
