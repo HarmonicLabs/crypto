@@ -109,7 +109,7 @@ export abstract class HashMD<T extends HashMD<T>> extends Hash<T> {
   digest() {
     const { buffer, outputLen } = this;
     this.digestInto(buffer);
-    const res = buffer.slice(0, outputLen);
+    const res = Uint8Array.prototype.slice.call( buffer, 0, outputLen );
     this.destroy();
     return res;
   }

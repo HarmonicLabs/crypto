@@ -5,8 +5,7 @@ import { positiveMod } from "./utils/positiveMod";
 import { assert } from "./utils/assert";
 import { bigintToBuffer } from "./utils/bigintToBuffer";
 
-
-type bigpoint = [bigint,bigint];
+export type bigpoint = [bigint,bigint];
 
 const Q = BigInt( "57896044618658097711785492504343953926634992332820282019728792003956564819949" ); // ipowi(255) - 19
 const Q38 = BigInt( "7237005577332262213973186563042994240829374041602535252466099000494570602494" ); // (Q + 3)/8
@@ -222,6 +221,14 @@ function forceUint8Array( stuff: Uint8ArrayLike ): Uint8Array
 export function scalarMultBase( scalar: bigint ): bigpoint
 {
     return scalarMul(BASE, scalar);
+}
+
+export function extendEd25519PrivateKey( privateKey: byte[] | Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
+{
+    const extended = sha2_512(privateKey);
+    const extension = extended.slice(32, 64);
+    const a = scalarFromBytes(extended.slice(0, 32));
+    return [ a, extension]
 }
 
 export function deriveEd25519PublicKey(privateKey: byte[]): byte[]

@@ -10,3 +10,5 @@ export * from "./sha2_512";
 export * from "./sha3";
 export * from "./types";
 export * from "./utils";
+export * from "./vrf";
+export * from "./ripemd_160";

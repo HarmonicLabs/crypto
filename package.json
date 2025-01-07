@@ -1,6 +1,6 @@
 {
   "name": "@harmoniclabs/crypto",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "collection of cryptographic functions that support every js runtime for ES5+",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -34,7 +34,7 @@
   "homepage": "https://github.com/HarmonicLabs/crypto#readme",
   "dependencies": {
     "@harmoniclabs/bitstream": "^1.0.0",
-    "@harmoniclabs/uint8array-utils": "^1.0.0"
+    "@harmoniclabs/uint8array-utils": "^1.0.3"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.18.6",

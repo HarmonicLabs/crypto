@@ -1,6 +1,5 @@
 import { fromHex } from "@harmoniclabs/uint8array-utils";
-import { verifyEcdsaSecp256k1Signature, verifySchnorrSecp256k1Signature } from "..";
-import exp from "constants";
+import { verifyEcdsaSecp256k1Signature, verifySchnorrSecp256k1Signature } from "../secp256k1";
 import { secp256k1, signSecp256k1 } from "../noble/secp256k1";
 
 function testFail( title: string, fn: () => void ): void
