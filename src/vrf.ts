@@ -37,6 +37,12 @@ export interface VRFProof {
 
 /**
  * https://datatracker.ietf.org/doc/html/rfc9381#section-5.1
+ * 
+ * test cases:
+ * https://datatracker.ietf.org/doc/html/rfc9381#name-ecvrf-edwards25519-sha512-e
+ * https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vrf-03#appendix-A.4
+ * 
+ * 
  */
 export function vrf_ed25519_sha512_ell2_prove(sk: Uint8Array, alpha: Uint8Array): VRFProof
 {

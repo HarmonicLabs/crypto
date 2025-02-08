@@ -4,6 +4,9 @@ import { buffToByteArr, byte, byteArrToHex } from "./types";
 import { positiveMod } from "./utils/positiveMod";
 import { assert } from "./utils/assert";
 import { bigintToBuffer } from "./utils/bigintToBuffer";
+import { hasGlobalWebCrypto } from "./hasGlobalWebCrypto";
+
+const HAS_NATIVE_ASYNC_SUPPORT = hasGlobalWebCrypto;
 
 export type bigpoint = [bigint,bigint];
 
