@@ -1,5 +1,5 @@
 import { fromHex, isUint8Array } from "@harmoniclabs/uint8array-utils";
-import { sha2_512 } from "./sha2_512";
+import { sha2_512_sync } from "./sha2_512";
 import { buffToByteArr, byte, byteArrToHex } from "./types";
 import { positiveMod } from "./utils/positiveMod";
 import { assert } from "./utils/assert";
@@ -210,7 +210,7 @@ export function scalarFromBytes(h: byte[] | Uint8Array): bigint
 
 function ihash( m: byte[] ): bigint
 {
-    return decodeInt( sha2_512(m) );
+    return decodeInt( sha2_512_sync(m) );
 }
 
 type Uint8ArrayLike = Uint8Array | string | byte[];
@@ -228,7 +228,7 @@ export function scalarMultBase( scalar: bigint ): bigpoint
 
 export function extendEd25519PrivateKey( privateKey: byte[] | Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
 {
-    const extended = sha2_512(privateKey);
+    const extended = sha2_512_sync(privateKey);
     const extension = extended.slice(32, 64);
     const a = scalarFromBytes(extended.slice(0, 32));
     return [ a, extension]
@@ -236,7 +236,7 @@ export function extendEd25519PrivateKey( privateKey: byte[] | Uint8Array ): [ sc
 
 export function deriveEd25519PublicKey(privateKey: byte[]): byte[]
 {
-    const extended = sha2_512(privateKey);
+    const extended = sha2_512_sync(privateKey);
     const a = scalarFromBytes(extended);
     const A = scalarMul(BASE, a);
 
@@ -277,7 +277,7 @@ export function signEd25519(
     message = forceUint8Array( message );
     privateKey = forceUint8Array( privateKey );
 
-    return signExtendedEd25519( message, sha2_512( asBytes( privateKey ) ) );
+    return signExtendedEd25519( message, sha2_512_sync( asBytes( privateKey ) ) );
 }
 
 export function signExtendedEd25519(

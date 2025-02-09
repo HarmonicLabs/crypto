@@ -1,5 +1,5 @@
 import { bigpoint, bigpointToUint8Array, deriveEd25519PublicKey, extendEd25519PrivateKey, pointFromBytes, scalarFromBytes, scalarMul, scalarMultBase } from "./ed25519";
-import { sha2_512 } from "./sha2_512";
+import { sha2_512_sync } from "./sha2_512";
 import { byte } from "./types";
 
 /**
@@ -77,8 +77,8 @@ export function  vrf_ed25519_sha512_ell2_hash_to_curve(
     input[1] = ONE;
     input.set(public_key, 2);
     input.set(alpha_string, 2 + public_key.length);
-    //return pointFromBytes(sha2_512(input))
-    return sha2_512(input)
+    //return pointFromBytes(sha2_512_sync(input))
+    return sha2_512_sync(input)
 }
 
 export function vrf_ed25519_sha512_ell2_nonce_generation(
@@ -89,8 +89,8 @@ export function vrf_ed25519_sha512_ell2_nonce_generation(
     const input = new Uint8Array( 64 );
     input.set( secret_extension, 0 );
     input.set( H, 32 );
-    //return pointFromBytes(sha2_512(input))
-    return scalarFromBytes(sha2_512(input));
+    //return pointFromBytes(sha2_512_sync(input))
+    return scalarFromBytes(sha2_512_sync(input));
 }
 
 export function vrf_ed25519_sha512_ell2_challenge_generation(
@@ -107,5 +107,5 @@ export function vrf_ed25519_sha512_ell2_challenge_generation(
     input.set( gamma, 2 + H.length );
     input.set( announcement_1, 2 + H.length + gamma.length );
     input.set( announcement_2, 2 + H.length + gamma.length + announcement_1.length );
-    return sha2_512(input).slice(0,16);
+    return sha2_512_sync(input).slice(0,16);
 }

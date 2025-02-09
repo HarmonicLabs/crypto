@@ -1,12 +1,54 @@
+import { uint8ArrayEq } from "@harmoniclabs/uint8array-utils";
+import { hasGlobalWebCrypto } from "./hasGlobalWebCrypto";
 import { byte, uint64 as uint64_t } from "./types";
 import { uint64, forceUint64, uint64Rotr, byteArrToHex, uint64ToBytesBE } from "./types";
+import { sha512 } from "./noble/sha512";
 
+let __hasNativeSupport = hasGlobalWebCrypto && typeof globalThis.crypto.subtle.digest === "function";
+const NATIVE_ALGO = "SHA-512";
+const digest = __hasNativeSupport ?
+    globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle) :
+    () => Promise.resolve( new ArrayBuffer(0) );
+
+async function nativeSha2_512( data: Uint8Array | ArrayBuffer ): Promise<Uint8Array>
+{
+    return new Uint8Array( await digest( NATIVE_ALGO, data ) );
+}
+
+async function _test( data: Uint8Array )
+{
+    try {
+        const nativeRestult = new Uint8Array( await nativeSha2_512( data ) ?? [] );
+        __hasNativeSupport = __hasNativeSupport && uint8ArrayEq( nativeRestult, sha2_512_sync( data ) );
+    } catch { __hasNativeSupport = false; }
+}
+if( __hasNativeSupport ) {
+    (async function(){
+        try {
+            const repeatArr = ( arr: number[], n: number ) => {
+                const finalLen = arr.length * n;
+                const dest = new Array( finalLen );
+                for( let i = 0; i < finalLen; i++ ) {
+                    dest[i] = arr[i % arr.length];
+                }
+                return dest;
+            }
+            [
+                new Uint8Array( 0 ),
+                new Uint8Array( 10 ),
+                new Uint8Array( new Uint8Array([ 0xde, 0xad, 0xbe, 0xef ]) ),
+                new Uint8Array( new Uint8Array( repeatArr([0xaa], 20 ) ) ),
+                new Uint8Array( new Uint8Array( repeatArr([ 0xde, 0xad, 0xbe, 0xef ], 10 ) ) ),
+            ].forEach( _test );
+        } catch { __hasNativeSupport = false; }
+    })()
+}
 
 /**
  * Pad a bytearray so its size is a multiple of 128 (1024 bits).
  * Internal method.
  */
-export function _sha2_512_pad( src: byte[] ): byte[]
+export function _sha2_512_sync_pad( src: byte[] ): byte[]
 {
     const nBits = src.length*8;
     
@@ -38,7 +80,7 @@ export function _sha2_512_pad( src: byte[] ): byte[]
     return dst;
 }
 
-const _sha2_512_k: readonly uint64_t[] = Object.freeze([
+const _sha2_512_sync_k: readonly uint64_t[] = Object.freeze([
     uint64( "0x428a2f98d728ae22" ), uint64( "0x7137449123ef65cd" ), 
     uint64( "0xb5c0fbcfec4d3b2f" ), uint64( "0xe9b5dba58189dbbc" ),
     uint64( "0x3956c25bf348b538" ), uint64( "0x59f111f1b605d019" ), 
@@ -85,103 +127,14 @@ const _sha2_512_k: readonly uint64_t[] = Object.freeze([
  * getulates sha2-512 (64bytes) hash of a list of uint8 numbers.
  * Result is also a list of uint8 number.
  * @example 
- * bytesToHex(sha2_512([0x61, 0x62, 0x63])) => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+ * bytesToHex(sha2_512_sync([0x61, 0x62, 0x63])) => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
  * @example 
- * bytesToHex(sha2_512([])) => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+ * bytesToHex(sha2_512_sync([])) => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
  * @param {number[]} bytes - list of uint8 numbers
  * @returns {number[]} - list of uint8 numbers
  */
-export function sha2_512( bytes: byte[] | Uint8Array ): Uint8Array
+export function sha2_512_sync( bytes: byte[] | Uint8Array ): Uint8Array
 {
-    if( bytes instanceof Uint8Array ) bytes = Array.from( bytes ) as byte[];
-    // initial has; updated later
-    const hash: uint64_t[] = [
-        uint64( "0x6a09e667f3bcc908" ),
-        uint64( "0xbb67ae8584caa73b" ),
-        uint64( "0x3c6ef372fe94f82b" ),
-        uint64( "0xa54ff53a5f1d36f1" ),
-        uint64( "0x510e527fade682d1" ),
-        uint64( "0x9b05688c2b3e6c1f" ),
-        uint64( "0x1f83d9abfb41bd6b" ),
-        uint64( "0x5be0cd19137e2179" ),
-    ];
-
-    function sigma0(x: uint64_t): uint64_t
-    {
-        return forceUint64((uint64Rotr( x, 1 ) ^ uint64Rotr( x, 8 )) ^ ( x >> BigInt(7) ));
-    }
-
-    function sigma1(x: uint64_t): uint64_t
-    {
-        return forceUint64((uint64Rotr( x, 19 ) ^ uint64Rotr( x, 61 )) ^ ( x >> BigInt(6) ));
-    }
-
-    bytes = _sha2_512_pad(bytes);
-
-    // break message in successive 64 byte chunks
-    for (let chunkStart = 0; chunkStart < bytes.length; chunkStart += 128)
-    {
-        const chunk = bytes.slice(chunkStart, chunkStart + 128);
-
-        const w: uint64_t[] = (new Array(80)).fill( BigInt( 0 ) ); // array of 32 bit numbers!
-
-        // copy chunk into first 16 hi/lo positions of w (i.e. into first 32 uint32 positions)
-        for (let i = 0; i < 16; i++) {
-            w[i] = uint64( "0x" + byteArrToHex( chunk.slice(i*8, i*8 + 8) ) );
-        }
-
-        // extends the first 16 positions into the remaining 80 positions
-        for (let i = 16; i < 80; i++)
-        {
-            w[i] = forceUint64(sigma1(w[i-2]) + w[i-7] + sigma0(w[i-15]) + w[i-16]);
-        }
-
-        // intialize working variables to current hash value
-        let a = hash[0];
-        let b = hash[1];
-        let c = hash[2];
-        let d = hash[3];
-        let e = hash[4];
-        let f = hash[5];
-        let g = hash[6];
-        let h = hash[7];
-
-        // compression function main loop
-        for (let i = 0; i < 80; i++)
-        {
-            let S1 = ((uint64Rotr(e, 14) ^ uint64Rotr(e, 18)) ^ uint64Rotr(e, 41)) as uint64
-            let ch = ( ( e & f ) ^ ( (~e) & g ) ) as uint64;
-            let temp1 = forceUint64( h + S1 + ch + _sha2_512_k[i] + w[i] );
-            let S0 = (uint64Rotr( a, 28 ) ^ uint64Rotr( a, 34 )) ^ (uint64Rotr( a, 39 )) as uint64;
-            let maj = ((( a & b ) ^ (a & c)) ^ (b & (c))) as uint64;
-            let temp2 = forceUint64(S0 + maj);
-
-            h = g;
-            g = f;
-            f = e;
-            e = forceUint64(d + temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = forceUint64(temp1 + temp2);
-        }
-
-        // update the hash
-        hash[0] = forceUint64(hash[0] + a);
-        hash[1] = forceUint64(hash[1] + b);
-        hash[2] = forceUint64(hash[2] + c);
-        hash[3] = forceUint64(hash[3] + d);
-        hash[4] = forceUint64(hash[4] + e);
-        hash[5] = forceUint64(hash[5] + f);
-        hash[6] = forceUint64(hash[6] + g);
-        hash[7] = forceUint64(hash[7] + h);
-    }
-
-    // produce the final digest of uint8 numbers
-    const result: byte[] = [];
-    for (let i = 0; i < 8; i++) {
-        result.push( ...uint64ToBytesBE( hash[i] ) );
-    }
-
-    return new Uint8Array( result );
+    if(!( bytes instanceof Uint8Array )) bytes = new Uint8Array( bytes );
+    return sha512( bytes );
 }

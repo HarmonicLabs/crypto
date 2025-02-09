@@ -1,4 +1,4 @@
-import  { encodeBech32, byte, decodeBech32, isBech32, sha2_512, sha3, blake2b, sha2_256, blake2b_224, blake2b_256, signEd25519, sha2_256_sync } from "..";
+import  { encodeBech32, byte, decodeBech32, isBech32, sha2_512_sync, sha3, blake2b, sha2_256, blake2b_224, blake2b_256, signEd25519, sha2_256_sync } from "..";
 import blake2 from "blake2";
 import * as uint8array from "@harmoniclabs/uint8array-utils";
 import { keccak_256 } from "../";
@@ -102,17 +102,17 @@ describe("src/crypto", () => {
 
     });
 
-    describe("sha2_512", () => {
+    describe("sha2_512_sync", () => {
 
-        test('bytesToHex( sha2_512( [0x61, 0x62, 0x63] ) ) => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"', () => {
+        test('bytesToHex( sha2_512_sync( [0x61, 0x62, 0x63] ) ) => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"', () => {
             expect(
-                bytesToHex( sha2_512( [0x61, 0x62, 0x63] ) )
+                bytesToHex( sha2_512_sync( [0x61, 0x62, 0x63] ) )
             ).toEqual("ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f")
         });
 
-        test('bytesToHex( sha2_512([]) ) => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"', () => {
+        test('bytesToHex( sha2_512_sync([]) ) => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"', () => {
             expect(
-                bytesToHex( sha2_512([]) )
+                bytesToHex( sha2_512_sync([]) )
             ).toEqual("cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e")
         });
 
