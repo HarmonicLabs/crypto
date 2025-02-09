@@ -1,4 +1,4 @@
-import  { encodeBech32, byte, decodeBech32, isBech32, sha2_512, sha3, blake2b, sha2_256, blake2b_224, blake2b_256, signEd25519 } from "..";
+import  { encodeBech32, byte, decodeBech32, isBech32, sha2_512, sha3, blake2b, sha2_256, blake2b_224, blake2b_256, signEd25519, sha2_256_sync } from "..";
 import blake2 from "blake2";
 import * as uint8array from "@harmoniclabs/uint8array-utils";
 import { keccak_256 } from "../";
@@ -86,13 +86,13 @@ describe("src/crypto", () => {
 
         test('bytesToHex(sha2_256([0x61, 0x62, 0x63])) => "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"', () => {
             expect(
-                bytesToHex( sha2_256([0x61, 0x62, 0x63]) )
+                bytesToHex( sha2_256_sync([0x61, 0x62, 0x63]) )
             ).toEqual("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
         });
 
         test('sha2_256(textToBytes("Hello, World!")) => [223, 253, 96, 33, 187, 43, 213, 176, 175, 103, 98, 144, 128, 158, 195, 165, 49, 145, 221, 129, 199, 247, 10, 75, 40, 104, 138, 54, 33, 130, 152, 111]', () => {
             expect(
-                sha2_256(textToBytes("Hello, World!"))
+                sha2_256_sync(textToBytes("Hello, World!"))
             ).toEqual(
                 new Uint8Array(
                     [223, 253, 96, 33, 187, 43, 213, 176, 175, 103, 98, 144, 128, 158, 195, 165, 49, 145, 221, 129, 199, 247, 10, 75, 40, 104, 138, 54, 33, 130, 152, 111]
@@ -179,7 +179,7 @@ describe("src/crypto", () => {
         function test_eq_224( data: byte[] ): void
         {
             const expected = blake2.createHash('blake2b',{digestLength:28})
-                .update(Buffer.from(data)) // node; this is fine
+                .update(Buffer.from(data))
                 .digest("hex");
             const received = uint8array.toHex( blake2b_224( data ) );
 

@@ -1,38 +1,90 @@
-import { isUint8Array } from "@harmoniclabs/uint8array-utils";
+import { isUint8Array, uint8ArrayEq } from "@harmoniclabs/uint8array-utils";
 import { buffToByteArr, byte } from "./types";
 import { rotr32 } from "./utils/rotr32";
+import { hasGlobalWebCrypto } from "./hasGlobalWebCrypto";
+
+let __hasNativeSupport = hasGlobalWebCrypto && typeof globalThis.crypto.subtle.digest === "function";
+const NATIVE_ALGO = "SHA-256";
+const digest = __hasNativeSupport ?
+    globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle) :
+    () => Promise.resolve( new ArrayBuffer(0) );
+
+async function nativeSha2_256( data: Uint8Array | ArrayBuffer ): Promise<Uint8Array>
+{
+    return new Uint8Array( await digest( NATIVE_ALGO, data ) );
+}
+
+async function _test( data: Uint8Array )
+{
+    try {
+        const nativeRestult = new Uint8Array( await nativeSha2_256( data ) ?? [] );
+        __hasNativeSupport = __hasNativeSupport && uint8ArrayEq( nativeRestult, sha2_256_sync( data ) );
+    } catch { __hasNativeSupport = false; }
+}
+if( __hasNativeSupport ) {
+    (async function(){
+        try {
+            const repeatArr = ( arr: number[], n: number ) => {
+                const finalLen = arr.length * n;
+                const dest = new Array( finalLen );
+                for( let i = 0; i < finalLen; i++ ) {
+                    dest[i] = arr[i % arr.length];
+                }
+                return dest;
+            }
+            [
+                new Uint8Array( 0 ),
+                new Uint8Array( 10 ),
+                new Uint8Array( new Uint8Array([ 0xde, 0xad, 0xbe, 0xef ]) ),
+                new Uint8Array( new Uint8Array( repeatArr([0xaa], 20 ) ) ),
+                new Uint8Array( new Uint8Array( repeatArr([ 0xde, 0xad, 0xbe, 0xef ], 10 ) ) ),
+            ].forEach( _test );
+        } catch { __hasNativeSupport = false; }
+    })()
+}
 
 /**
-     * Pad a bytearray so its size is a multiple of 64 (512 bits).
-     * Internal method.
-     */
-function pad(src: byte[]): byte[]
+ * Pad a bytearray so its size is a multiple of 64 (512 bits).
+ * Internal method.
+ */
+function pad(src: Uint8Array): Uint8Array
 {
-    let nBits = src.length*8;
-    
-    let dst = src.slice();
+    const nBits = src.length*8;
+    let finalLen = src.length;
+    // dst = src.slice();
 
-    dst.push(0x80);
+    // dst.push(0x80);
+    finalLen++;
 
-    let nZeroes = (64 - dst.length%64) - 8;
+    let nZeroes = (64 - (src.length + 1)%64) - 8;
     if (nZeroes < 0) {
         nZeroes += 64;
     }
 
-    for (let i = 0; i < nZeroes; i++) {
-        dst.push(0);
-    }
+    // for (let i = 0; i < nZeroes; i++) {
+    //     dst.push(0);
+    // }
+    finalLen += nZeroes;
 
     // assume nBits fits in 32 bits
 
-    dst.push(0);
-    dst.push(0);
-    dst.push(0);
-    dst.push(0);
-    dst.push( ((nBits >> 24) & 0xff) as byte);
-    dst.push( ((nBits >> 16) & 0xff) as byte);
-    dst.push( ((nBits >> 8)  & 0xff) as byte);
-    dst.push( ((nBits >> 0)  & 0xff) as byte);
+    // dst.push(0);
+    // dst.push(0);
+    // dst.push(0);
+    // dst.push(0);
+    // dst.push( ((nBits >> 24) & 0xff) as byte);
+    // dst.push( ((nBits >> 16) & 0xff) as byte);
+    // dst.push( ((nBits >> 8)  & 0xff) as byte);
+    // dst.push( ((nBits >> 0)  & 0xff) as byte);
+    finalLen += 8;
+
+    const dst = new Uint8Array( finalLen );
+    dst.set( src );
+    dst[src.length] = 0x80;
+    dst[finalLen - 4] = (nBits >>> 24) & 0xff;
+    dst[finalLen - 3] = (nBits >>> 16) & 0xff;
+    dst[finalLen - 2] = (nBits >>> 8 ) & 0xff;
+    dst[finalLen - 1] =  nBits         & 0xff;
     
     return dst;
 }
@@ -66,6 +118,16 @@ function sigma1(x: number ): number
     return rotr32(x, 17) ^ rotr32(x, 19) ^ (x >>> 10);
 }
 
+const initialHash = new Uint32Array([
+    0x6a09e667, 
+    0xbb67ae85, 
+    0x3c6ef372, 
+    0xa54ff53a, 
+    0x510e527f, 
+    0x9b05688c, 
+    0x1f83d9ab, 
+    0x5be0cd19,
+]);
 /**
  * getulates sha2-256 (32bytes) hash of a list of uint8 numbers.
  * Result is also a list of uint8 number.
@@ -76,41 +138,33 @@ function sigma1(x: number ): number
  * @param {uint5[]} bytes - list of uint8 numbers
  * @returns {number[]} - list of uint8 numbers
  */
-export function sha2_256( bytes: byte[] | Uint8Array ): Uint8Array
+export function sha2_256_sync( _bytes: byte[] | Uint8Array | ArrayBuffer ): Uint8Array
 {
-    if( isUint8Array( bytes ) )
-    {
-        bytes = buffToByteArr( bytes );
-    }
+    if(!( _bytes instanceof Uint8Array )) _bytes = new Uint8Array( _bytes );
+    if(   _bytes instanceof ArrayBuffer ) _bytes = new Uint8Array( _bytes );
     /**
      * Initial hash (updated during compression phase)
      */
-    const hash: number[] = [
-        0x6a09e667, 
-        0xbb67ae85, 
-        0x3c6ef372, 
-        0xa54ff53a, 
-        0x510e527f, 
-        0x9b05688c, 
-        0x1f83d9ab, 
-        0x5be0cd19,
-    ];
+    const hash = initialHash.slice();
 
-    bytes = pad(bytes);
+    const bytes = pad( _bytes as Uint8Array );
 
     // break message in successive 64 byte chunks
     for (let chunkStart = 0; chunkStart < bytes.length; chunkStart += 64) {
-        let chunk = bytes.slice(chunkStart, chunkStart + 64);
+        let chunk = Uint8Array.prototype.slice.call( bytes, chunkStart, chunkStart + 64 ); 
+        // bytes.slice(chunkStart, chunkStart + 64);
 
-        let w = (new Array(64)).fill(0); // array of 32 bit numbers!
+        const w = new Int32Array( 64 );// (new Array(64)).fill(0); // array of 32 bit numbers!
 
         // copy chunk into first 16 positions of w
         for (let i = 0; i < 16; i++) {
             w[i] = (chunk[i*4 + 0] << 24) |
-                    (chunk[i*4 + 1] << 16) |
-                    (chunk[i*4 + 2] <<  8) |
-                    (chunk[i*4 + 3]);
+                   (chunk[i*4 + 1] << 16) |
+                   (chunk[i*4 + 2] <<  8) |
+                   (chunk[i*4 + 3]);
         }
+        // this DOES NOT WORK
+        // w.set( new Int32Array( chunk.buffer, chunk.byteOffset, 16 ) );
 
         // extends the first 16 positions into the remaining 48 positions
         for (let i = 16; i < 64; i++) {
@@ -158,15 +212,29 @@ export function sha2_256( bytes: byte[] | Uint8Array ): Uint8Array
     }
 
     // produce the final digest of uint8 numbers
-    let result = [];
+    const result = new Uint8Array(32);
     for (let i = 0; i < 8; i++) {
         let item = hash[i];
 
-        result.push( ((item >> 24) & 0xff) as byte );
-        result.push( ((item >> 16) & 0xff) as byte );
-        result.push( ((item >>  8) & 0xff) as byte );
-        result.push( ((item >>  0) & 0xff) as byte );
+        // result.push( ((item >> 24) & 0xff) as byte );
+        // result.push( ((item >> 16) & 0xff) as byte );
+        // result.push( ((item >>  8) & 0xff) as byte );
+        // result.push( ((item >>  0) & 0xff) as byte );
+        const i4 = i*4;
+        result[i4    ] = (item >>> 24) & 0xff;
+        result[i4 + 1] = (item >>> 16) & 0xff;
+        result[i4 + 2] = (item >>>  8) & 0xff;
+        result[i4 + 3] = (item       ) & 0xff;
     }
 
-    return new Uint8Array( result );
+    return result;
 }
+
+function wrapped_sha2_256_sync( data: Uint8Array | ArrayBuffer ): Promise<Uint8Array>
+{
+    return Promise.resolve( sha2_256_sync( data ) );
+}
+
+export const sha2_256: typeof nativeSha2_256 = __hasNativeSupport ? nativeSha2_256 : wrapped_sha2_256_sync;
+
+export const hasNativeSha2_256 = sha2_256 === nativeSha2_256;
