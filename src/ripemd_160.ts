@@ -7,7 +7,8 @@ export function ripemd160(input: Uint8Array | string): Uint8Array {
         else if( isHex(input) ) input = fromHex(input.toLowerCase());
         else input = fromUtf8(input);
     }
-    if (!(input instanceof Uint8Array)) throw new Error("ripemd160: input must be Uint8Array or string");
+    if (!(input instanceof Uint8Array)) input = new Uint8Array( input )
+    // throw new Error("ripemd160: input must be Uint8Array or string");
     return new RIPEMD160().update(input).digest();
 }
 

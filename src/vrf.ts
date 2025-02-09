@@ -1,4 +1,4 @@
-import { bigpoint, bigpointToUint8Array, deriveEd25519PublicKey, extendEd25519PrivateKey, pointFromBytes, scalarFromBytes, scalarMul, scalarMultBase } from "./ed25519";
+import { bigpoint, bigpointToUint8Array, deriveEd25519PublicKey_sync, getExtendEd25519PrivateKeyComponents_sync, pointFromBytes, scalarFromBytes, scalarMul, scalarMultBase } from "./ed25519";
 import { sha2_512_sync } from "./sha2_512";
 import { byte } from "./types";
 
@@ -46,9 +46,9 @@ export interface VRFProof {
  */
 export function vrf_ed25519_sha512_ell2_prove(sk: Uint8Array, alpha: Uint8Array): VRFProof
 {
-    const [ scalar, extension ] = extendEd25519PrivateKey( sk );
+    const [ scalar, extension ] = getExtendEd25519PrivateKeyComponents_sync( sk );
     // 1. Use SK to derive the VRF secret scalar x and the VRF public key Y = x*B
-    const pk = new Uint8Array( deriveEd25519PublicKey( Array.from( sk ) as byte[] ) );
+    const pk = new Uint8Array( deriveEd25519PublicKey_sync( sk ) );
     const H = vrf_ed25519_sha512_ell2_hash_to_curve( pk, alpha );
     const H_point = pointFromBytes( H );
     const gamma = scalarMul( H_point, scalar );
@@ -67,7 +67,7 @@ export function vrf_ed25519_sha512_ell2_prove(sk: Uint8Array, alpha: Uint8Array)
     };
 }
 
-export function  vrf_ed25519_sha512_ell2_hash_to_curve(
+export function vrf_ed25519_sha512_ell2_hash_to_curve(
     public_key: Uint8Array,
     alpha_string: Uint8Array
 )

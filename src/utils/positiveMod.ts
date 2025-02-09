@@ -1,7 +1,9 @@
+const _0n = BigInt(0);
 
 export function positiveMod(x: bigint, n: bigint): bigint
 {
-    const _n = BigInt( n );
-	const res = BigInt( x ) % _n;
-    return res < BigInt(0) ? res + _n : res;
+    n = typeof n === "bigint" ? n : BigInt( n );
+    x = typeof x === "bigint" ? x : BigInt( x );
+	const res = x % n;
+    return res < _0n ? res + n : res;
 }

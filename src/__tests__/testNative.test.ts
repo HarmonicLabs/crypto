@@ -40,8 +40,8 @@ describe("test native", () => {
 
         let start = 0;
         let end = 0;
-        let avg = 0;
-        let avg2 = 0;
+        let subdleAvg = 0;
+        let jsAvg = 0;
         let n = 0;
         async function _test( data: Uint8Array )
         {
@@ -49,12 +49,12 @@ describe("test native", () => {
                 start = performance.now();
                 const nativeRestult = new Uint8Array( await nativesha2_256_sync( data ) ?? [] );
                 end = performance.now();
-                avg += end - start;
+                subdleAvg += end - start;
 
                 start = performance.now();
                 const result = sha2_256_sync( data );
                 end = performance.now();
-                avg2 += end - start;
+                jsAvg += end - start;
 
                 n++;
 
@@ -77,10 +77,10 @@ describe("test native", () => {
                     expect( await _test( data ) ).toBe( true );
                     // await new Promise( resolve => setTimeout( resolve, 1000 ) );
                 }
-                avg /= n;
-                avg2 /= n;
-                console.log({ avg, avg2 });
-                console.log( avg * 100 / avg2 );
+                subdleAvg /= n;
+                jsAvg /= n;
+                console.log({ subdleAvg, jsAvg });
+                console.log("crypto.subdle takes " + (subdleAvg * 100 / jsAvg) + "% the time of the pure-js implementation" );
             })
         }
         
@@ -130,8 +130,8 @@ describe("test native", () => {
 
         let start = 0;
         let end = 0;
-        let avg = 0;
-        let avg2 = 0;
+        let subdleAvg = 0;
+        let jsAvg = 0;
         let n = 0;
         async function _test( data: Uint8Array )
         {
@@ -139,12 +139,12 @@ describe("test native", () => {
                 start = performance.now();
                 const nativeRestult = new Uint8Array( await nativeSha2_512( data ) ?? [] );
                 end = performance.now();
-                avg += end - start;
+                subdleAvg += end - start;
 
                 start = performance.now();
                 const result = sha2_512_sync( data );
                 end = performance.now();
-                avg2 += end - start;
+                jsAvg += end - start;
 
                 n++;
 
@@ -169,14 +169,17 @@ describe("test native", () => {
                     expect( toHex( result ) ).toEqual( toHex( nativeRestult ) );
                     // await new Promise( resolve => setTimeout( resolve, 1000 ) );
                 }
-                avg /= n;
-                avg2 /= n;
-                console.log({ avg, avg2 });
-                console.log( avg * 100 / avg2 );
+                subdleAvg /= n;
+                jsAvg /= n;
+                // console.log({ subdleAvg, jsAvg });
+                // console.log(
+                //     "crypto.subdle takes " +
+                //     (subdleAvg * 100 / jsAvg).toFixed(2) +
+                //     "% the time of the pure-js implementation" );
             })
         }
 
-        testMany([
+        const arr = [
             new Uint8Array( 0 ),
             new Uint8Array( 10 ),
             new Uint8Array( fromHex("deadbeef") ),
@@ -194,7 +197,20 @@ describe("test native", () => {
             new Uint8Array( fromHex("deadbeef".repeat(50)) ),
             new Uint8Array( fromHex("deadbeef".repeat(60)) ),
             new Uint8Array( fromHex("deadbeef".repeat(69)) ),
-        ]);
+        ];
+        testMany(
+            arr
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+            .concat(arr)
+        );
 
     })
 })

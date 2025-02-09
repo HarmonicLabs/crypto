@@ -1,12 +1,198 @@
-import { fromHex, isUint8Array } from "@harmoniclabs/uint8array-utils";
-import { sha2_512_sync } from "./sha2_512";
+import { concatUint8Array, fromHex, isUint8Array } from "@harmoniclabs/uint8array-utils";
+import { sha2_512, sha2_512_sync } from "./sha2_512";
 import { buffToByteArr, byte, byteArrToHex } from "./types";
 import { positiveMod } from "./utils/positiveMod";
 import { assert } from "./utils/assert";
 import { bigintToBuffer } from "./utils/bigintToBuffer";
 import { hasGlobalWebCrypto } from "./hasGlobalWebCrypto";
 
-const HAS_NATIVE_ASYNC_SUPPORT = hasGlobalWebCrypto;
+
+// "Ed25519" does not seem to have great support yet
+let __hasNativeSupport = false && (
+    hasGlobalWebCrypto
+    && typeof globalThis.crypto.subtle.importKey === "function"
+    && typeof globalThis.crypto.subtle.sign === "function"
+    && typeof globalThis.crypto.subtle.verify === "function"
+);
+const NATIVE_ALGO_NAME = "Ed25519";
+const NATIVE_ALGO = Object.freeze({ name: NATIVE_ALGO_NAME });
+const importKey: typeof globalThis.crypto.subtle.importKey = __hasNativeSupport ?
+    globalThis.crypto.subtle.importKey.bind(globalThis.crypto.subtle) :
+    () => Promise.resolve( new ArrayBuffer(0) ) as any;
+
+async function getNativePrivateKey( bytes: Uint8Array ): Promise<CryptoKey>
+{
+    // ensure 64 bytes
+    if( bytes.length === 32 ) bytes = getExtendedEd25519PrivateKey_sync( bytes );
+    return await importKey(
+        "raw",
+        bytes,
+        NATIVE_ALGO,
+        false,
+        ["sign", "deriveKey"]
+    );
+}
+
+async function getNativePublicKey( bytes: Uint8Array ): Promise<CryptoKey>
+{
+    return importKey(
+        "raw",
+        bytes,
+        NATIVE_ALGO,
+        false,
+        ["verify"]
+    );
+}
+
+async function nativeEd25519Sign( privateKey: Uint8Array, data: Uint8Array ): Promise<Uint8Array>
+{
+    if( !(await ensureNativeSupport()) )
+        return getEd25519Signature_sync( privateKey, data );
+    return new Uint8Array(
+        await globalThis.crypto.subtle.sign(
+            NATIVE_ALGO_NAME,
+            await getNativePrivateKey( privateKey ),
+            data
+        )
+    );
+}
+
+
+const ED25519_ORDER = BigInt(
+    '57896044618658097711785492504343953926634992332820282019728792003956564819949'
+);
+
+export function ed25519bigint( n: bigint ): bigint
+{
+    return positiveMod( n , ED25519_ORDER );
+}
+
+function toArrayBuffer( bytes: Uint8Array | ArrayBuffer ): ArrayBuffer
+{
+    if( bytes instanceof ArrayBuffer ) return bytes;
+    const buffer = new ArrayBuffer( bytes.length );
+    const view = new Uint8Array( buffer );
+    view.set( bytes );
+    return buffer;
+}
+
+async function nativeEd25519Verify(
+    publicKey: Uint8Array,
+    signature: Uint8Array | ArrayBuffer,
+    data: Uint8Array | ArrayBuffer
+): Promise<boolean>
+{
+    if(!(await ensureNativeSupport()))
+        return verifyEd25519Signature_sync( signature, data, publicKey );
+    
+    return globalThis.crypto.subtle.verify(
+        NATIVE_ALGO_NAME,
+        await getNativePublicKey( publicKey ),
+        toArrayBuffer( signature ),
+        toArrayBuffer( data )
+    );
+}
+
+async function _test(
+    privateKey: CryptoKey,
+    publicKey: CryptoKey,
+    data: Uint8Array,
+    uint8ArrayEq: (a: Uint8Array, b: Uint8Array) => boolean
+): Promise<void>
+{
+    try {
+        const privBytes = new Uint8Array( await globalThis.crypto.subtle.exportKey( "raw", privateKey ) );
+        const pubBytes = new Uint8Array( await globalThis.crypto.subtle.exportKey( "raw", publicKey ) );
+        const nativeSignResult = await nativeEd25519Sign( privBytes, data );
+        const nativeVerifyResult = await nativeEd25519Verify( pubBytes, nativeSignResult, data );
+        const mySignResult = getEd25519Signature_sync( data, privBytes );
+        const myVerifyResult = verifyEd25519Signature_sync( mySignResult, data, pubBytes );
+        __hasNativeSupport = (
+            __hasNativeSupport &&
+            uint8ArrayEq( nativeSignResult, mySignResult ) &&
+            nativeVerifyResult === myVerifyResult
+        );
+    } catch { __hasNativeSupport = false; }
+}
+let _support_was_tested = false;
+async function _test_support(){
+    if( _support_was_tested || !__hasNativeSupport ) return;
+    try {
+        // just for test
+        // well use our own keys
+        const _keyPair /* { privateKey, publicKey } */ = (await globalThis.crypto.subtle.generateKey(
+            NATIVE_ALGO,
+            true,
+            ["sign", "verify"]
+        )) as CryptoKeyPair;
+        const extendedPrivate = new Uint8Array( 64 );
+        globalThis.crypto.getRandomValues( extendedPrivate );
+
+        const cryptoPrivate = await getNativePrivateKey( extendedPrivate );
+
+        const repeatArr = <T>( arr: T[], n: number ): T[] => {
+            for( let i = 0; i < n; i++ ) arr = arr.concat( ...arr );
+            return arr;
+        };
+        const eqU8Arr = (a: Uint8Array, b: Uint8Array): boolean => {
+            if(!( a instanceof Uint8Array ) || !( b instanceof Uint8Array )) return false;
+            if( a.length !== b.length ) return false;
+            for( let i = 0; i < a.length; i++ ) if( a[i] !== b[i] ) return false;
+            return true;
+        };
+        const bench: [ native: number, js: number ][] = await Promise.all(
+            // repeatArr(
+            //     [
+            //         new Uint8Array( 0 ),
+            //         new Uint8Array( 10 ),
+            //         new Uint8Array([ 0xde, 0xad, 0xbe, 0xef ]),
+    // 
+            //         new Uint8Array( repeatArr([0xaa], 20 ) ),
+            //         new Uint8Array( repeatArr([0xbb], 20 ) ),
+            //         new Uint8Array( repeatArr([0xcc], 20 ) ),
+            //         new Uint8Array( repeatArr([0xdd], 20 ) ),
+            //         new Uint8Array( repeatArr([0xee], 20 ) ),
+            //         new Uint8Array( repeatArr([0xff], 20 ) ),
+    // 
+            //         new Uint8Array( repeatArr([0xaa, 0xbb], 33 ) ),
+            //         new Uint8Array( repeatArr([0xbb, 0xcc], 33 ) ),
+            //         new Uint8Array( repeatArr([0xcc, 0xdd], 33 ) ),
+            //         new Uint8Array( repeatArr([0xdd, 0xee], 33 ) ),
+            //         new Uint8Array( repeatArr([0xee, 0xff], 33 ) ),
+            //         new Uint8Array( repeatArr([0xff, 0x00], 33 ) ),
+    // 
+            //         new Uint8Array( repeatArr([ 0xde, 0xad, 0xbe, 0xef ], 30 ) ),
+            //     ],
+            //     10
+            // )
+            // .map( data => _test( privateKey, publicKey, data, uint8ArrayEq ) )
+            []
+        );
+        if( !__hasNativeSupport ) return;
+        let sum = bench.reduce( (acc, [native, js]) => {
+            acc[0] += native;
+            acc[1] += js;
+            return acc;
+        }, [ 0, 0 ] );
+        __hasNativeSupport = __hasNativeSupport && sum[0] < sum[1];
+    } catch { __hasNativeSupport = false; _support_was_tested = true; }
+    _support_was_tested = true;
+}
+if( __hasNativeSupport ) {
+    _test_support()
+} else { _support_was_tested = true; }
+/**
+ * There are cases where `globalThis.crypto.subtle` is fully defined
+ * but the algorithm `Ed25519` is NOT SUPPORTED.
+ * 
+ * unfortunately, there is NO WAY to check this syncronously.
+ */
+async function ensureNativeSupport(): Promise<boolean>
+{
+    if( !__hasNativeSupport ) return false;
+    await _test_support();
+    return __hasNativeSupport;
+}
 
 export type bigpoint = [bigint,bigint];
 
@@ -36,7 +222,7 @@ function expMod(b: bigint, e: bigint, m: bigint): bigint
         let t = expMod(b, e/BigInt( 2 ), m);
         t = (t*t) % m;
 
-        if ((e % BigInt( 2 )) != BigInt( 0 )) {
+        if ((e % BigInt( 2 )) !== BigInt( 0 )) {
             t = positiveMod(t*b, m)
         }
 
@@ -124,27 +310,21 @@ export function scalarMul(point: Readonly<bigpoint>, n: bigint): bigpoint
 /**
  * Curve point 'multiplication'
  */
-export function encodeInt(y: bigint): byte[] {
-    let bytes = Array.from( bigintToBuffer(y) ).reverse() as byte[];
-    
-    while (bytes.length < 32)
-    {
-        bytes.push(0);
-    }
-
-    return bytes;
+export function encodeInt(y: bigint): Uint8Array
+{
+    return bigintToBuffer( y, 32 ).reverse();
 }
 
-function decodeInt(s: byte[] | Uint8Array): bigint {
+function decodeInt(s: Uint8Array | Uint8Array): bigint {
     return BigInt(
         "0x" + byteArrToHex( s.reverse() )
     );
 }
 
-function bigpointToByteArray(point: bigpoint): byte[] {
+function bigpointToByteArray(point: bigpoint): Uint8Array {
     const [x, y] = point;
 
-    let bytes = encodeInt(y);
+    const bytes = encodeInt(y);
 
     // last bit is determined by x
     bytes[31] = ((bytes[31] & 0b011111111) | (Number(x & BigInt( 1 )) * 0b10000000)) as byte;
@@ -157,7 +337,7 @@ export function bigpointToUint8Array( point: bigpoint ): Uint8Array
     return new Uint8Array( bigpointToByteArray( point ) );
 }
 
-function getBit(bytes: byte[], i: number): 0 | 1
+function getBit(bytes: Uint8Array, i: number): 0 | 1
 {
     return ((bytes[Math.floor(i/8)] >> i%8) & 1) as  0 | 1
 }
@@ -171,9 +351,9 @@ function isOnCurve(point: bigpoint): boolean
     return (-xx + yy - BigInt( 1 ) - D*xx*yy) % Q == BigInt( 0 );
 }
 
-export function pointFromBytes(s: byte[] | Uint8Array): bigpoint
+export function pointFromBytes(s: Uint8Array | Uint8Array): bigpoint
 {
-    if( s instanceof Uint8Array ) s = asBytes( s );
+    if( s instanceof Uint8Array ) s = forceUint8Array( s );
     assert(s.length == 32, "point must have length of 32");
 
     const bytes = s.slice();
@@ -182,22 +362,20 @@ export function pointFromBytes(s: byte[] | Uint8Array): bigpoint
     const y = decodeInt(bytes);
 
     let x = recoverX(y);
-    if (Number(x & BigInt( 1 )) != getBit(s, 255)) {
+    if (Number(x & BigInt( 1 )) !== getBit(s, 255)) {
         x = Q - x;
     }
 
     const point: bigpoint = [x, y];
 
-    if (!isOnCurve(point)) {
-        throw new Error("point isn't on curve");
-    }
+    if (!isOnCurve(point)) throw new Error("point isn't on curve");
 
     return point;
 }
 
 const ipow2_253 = BigInt( "28948022309329048855892746252171976963317496166410141009864396001978282409984" ); // ipow2(253)
 
-export function scalarFromBytes(h: byte[] | Uint8Array): bigint
+export function scalarFromBytes(h: Uint8Array | Uint8Array): bigint
 {
     const bytes = h.slice(0, 32);
     bytes[0]  = (bytes[ 0  ] & 0b11111000) as byte;
@@ -208,17 +386,19 @@ export function scalarFromBytes(h: byte[] | Uint8Array): bigint
     );
 }
 
-function ihash( m: byte[] ): bigint
+function ihash( m: Uint8Array ): bigint
 {
     return decodeInt( sha2_512_sync(m) );
 }
 
-type Uint8ArrayLike = Uint8Array | string | byte[];
+type Uint8ArrayLike = ArrayBuffer | Uint8Array | string | byte[];
 
 function forceUint8Array( stuff: Uint8ArrayLike ): Uint8Array
 {
+    if( stuff instanceof Uint8Array ) return stuff;
+    if( stuff instanceof ArrayBuffer ) return new Uint8Array( stuff );
     if( typeof stuff === "string" ) return fromHex( stuff );
-    return isUint8Array( stuff ) ? stuff : new Uint8Array( stuff )
+    return new Uint8Array( stuff );
 }
 
 export function scalarMultBase( scalar: bigint ): bigpoint
@@ -226,15 +406,43 @@ export function scalarMultBase( scalar: bigint ): bigpoint
     return scalarMul(BASE, scalar);
 }
 
-export function extendEd25519PrivateKey( privateKey: byte[] | Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
+////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+//------------------------------------------------------------------------------------------------------// 
+//------------------------------------------- key management -------------------------------------------// 
+//------------------------------------------- and derivation -------------------------------------------// 
+//------------------------------------------------------------------------------------------------------// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+
+export function getExtendEd25519PrivateKeyComponents_sync( privateKey: Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
 {
     const extended = sha2_512_sync(privateKey);
     const extension = extended.slice(32, 64);
     const a = scalarFromBytes(extended.slice(0, 32));
-    return [ a, extension]
+    return [ a, extension ]
 }
 
-export function deriveEd25519PublicKey(privateKey: byte[]): byte[]
+export function getExtendedEd25519PrivateKey_sync( privateKey: Uint8Array ): Uint8Array
+{
+    privateKey = Uint8Array.prototype.slice.call( forceUint8Array( privateKey ), 0, 32 );
+    const extended = sha2_512_sync( privateKey );
+    extended.set( privateKey, 0 );
+    return extended;
+}
+
+export async function getExtendedEd25519PrivateKey( privateKey: Uint8Array ): Promise<Uint8Array>
+{
+    // here `__hasNativeSupport` instead of `await ensureNativeSupport()` is fine
+    // because we want to use `sha2_512`, wich implies different tests than the ones
+    // used in `ensureNativeSupport`; `__hasNativeSupport` at least tell us if there is a `crypto` global at all 
+    if( !__hasNativeSupport )
+        return getExtendedEd25519PrivateKey_sync( privateKey );
+    privateKey = Uint8Array.prototype.slice.call( forceUint8Array( privateKey ), 0, 32 );
+    const extended = await sha2_512(privateKey);
+    extended.set(privateKey, 0);
+    return extended;
+}
+
+export function deriveEd25519PublicKey_sync( privateKey: Uint8Array ): Uint8Array
 {
     const extended = sha2_512_sync(privateKey);
     const a = scalarFromBytes(extended);
@@ -243,20 +451,37 @@ export function deriveEd25519PublicKey(privateKey: byte[]): byte[]
     return bigpointToByteArray(A);
 }
 
+function wrapped_deriveEd25519PublicKey_sync( privateKey: Uint8Array ): Promise<Uint8Array>
+{
+    return Promise.resolve( deriveEd25519PublicKey_sync( privateKey ) );
+}
+
+async function deriveEd25519PublicKey_async( privateKey: Uint8Array ): Promise<Uint8Array>
+{
+    if( !__hasNativeSupport ) return deriveEd25519PublicKey_sync( privateKey );
+    const extended = await sha2_512(privateKey);
+    const a = scalarFromBytes(extended);
+    const A = scalarMul(BASE, a);
+
+    return bigpointToByteArray(A);
+}
+
+export const deriveEd25519PublicKey: typeof deriveEd25519PublicKey_async = __hasNativeSupport ? deriveEd25519PublicKey_async : wrapped_deriveEd25519PublicKey_sync;
+
 export function extendedToPublic( extended: Uint8Array | byte[] ): Uint8Array
 {
-    if( extended instanceof Uint8Array ) extended = Array.from( extended ) as byte[];
+    extended = forceUint8Array( extended );
     const a = scalarFromBytes(extended);
     const A = scalarMul(BASE, a);
 
     return new Uint8Array( bigpointToByteArray(A) );
 }
 
-function asBytes( stuff: Uint8ArrayLike ): byte[]
-{
-    if( typeof stuff === "string" ) return asBytes( fromHex( stuff ) )
-    return Array.from( stuff ) as byte[]
-}
+/////////////////////////////////////////////////////////////////////////////////////////////////// 
+//-----------------------------------------------------------------------------------------------// 
+//------------------------------------------- signing -------------------------------------------// 
+//-----------------------------------------------------------------------------------------------// 
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 export interface SignEd25519Result {
     0: Uint8Array, // pubKey
@@ -269,40 +494,77 @@ export interface SignEd25519Result {
     signature: Uint8Array,
 }
 
-export function signEd25519(
+/** sign a message with a (32 bytes) private key */
+export function signEd25519_sync(
     message: Uint8ArrayLike,
     privateKey: Uint8ArrayLike
 ): SignEd25519Result
 {
     message = forceUint8Array( message );
     privateKey = forceUint8Array( privateKey );
+    const extendedKey: Uint8Array = (privateKey as Uint8Array).length === 64 ?
+        privateKey as any :
+        sha2_512_sync( privateKey );
 
-    return signExtendedEd25519( message, sha2_512_sync( asBytes( privateKey ) ) );
+    return signExtendedEd25519_sync( message, extendedKey );
 }
 
-export function signExtendedEd25519(
+/** sign a message with a (32 bytes) private key */
+export async function signEd25519(
     message: Uint8ArrayLike,
-    extendedKey: Uint8ArrayLike
+    privateKey: Uint8ArrayLike
+): Promise<SignEd25519Result>
+{
+    privateKey = forceUint8Array( privateKey );
+    const extended = (privateKey as Uint8Array).length === 64 ?
+        privateKey as any :
+        await sha2_512( privateKey );
+    return await signExtendedEd25519( message, extended );
+}
+
+/** sign a message with a (64 bytes) private key */
+export function signExtendedEd25519_sync(
+    _message: Uint8ArrayLike,
+    _extendedKey: Uint8ArrayLike
 ): SignEd25519Result
 {
-    message = forceUint8Array( message );
-    extendedKey = forceUint8Array( extendedKey );
+    const message        = forceUint8Array( _message );
+    const privateKeyHash = forceUint8Array( _extendedKey );
 
-    if( extendedKey.length !== 64 )
-    throw new Error('signExtendedEd25519:: extended key must have length 64');
+    if( privateKeyHash.length !== 64 )
+    throw new Error('signExtendedEd25519_sync:: extended key must have length 64');
 
-    const privateKeyHash = asBytes( extendedKey );
-    const a = scalarFromBytes(privateKeyHash);
+    const a = scalarFromBytes( privateKeyHash );
 
     // for convenience getulate publicKey here:
-    const publicKey = bigpointToByteArray(scalarMul(BASE, a));
+    const publicKey = bigpointToByteArray(
+        scalarMul(BASE, a)
+    );
 
-    const r = ihash(privateKeyHash.slice(32, 64).concat( asBytes( message ) ) );
+    const r = ihash(
+        concatUint8Array(
+            privateKeyHash.slice( 32, 64 ),
+            forceUint8Array( message )
+        )
+    );
     const R = scalarMul(BASE, r);
-    const S = positiveMod(r + ihash(bigpointToByteArray(R).concat(publicKey).concat(asBytes( message )))*a, CURVE_ORDER);
+    const S = positiveMod(
+        r + 
+        ihash(
+            concatUint8Array(
+                bigpointToByteArray(R),
+                publicKey,
+                forceUint8Array( message )
+            )
+        )*a,
+        CURVE_ORDER
+    );
 
-    const pubKey = new Uint8Array( publicKey );
-    const signature = new Uint8Array( bigpointToByteArray(R).concat(encodeInt(S) ) );
+    const pubKey = publicKey;
+    const signature = concatUint8Array(
+        bigpointToByteArray(R),
+        encodeInt(S)
+    );
     return {
         0: pubKey,
         1: signature,
@@ -316,37 +578,94 @@ export function signExtendedEd25519(
     };
 }
 
-export function getEd25519Signature( message: Uint8ArrayLike, privateKey: Uint8ArrayLike ): Uint8Array
+function wrapped_signExtendedEd25519_sync(
+    message: Uint8ArrayLike,
+    extendedKey: Uint8ArrayLike
+): Promise<SignEd25519Result>
 {
-    return signEd25519( message, privateKey ).signature;
+    return Promise.resolve( signExtendedEd25519_sync( message, extendedKey ) );
 }
 
-export function verifyEd25519Signature(signature: Uint8ArrayLike, message: Uint8ArrayLike, publicKey: Uint8ArrayLike): boolean
+/** sign a message with a (64 bytes) private key */
+async function nativeExtendedSignEd25519(
+    _message: Uint8ArrayLike,
+    _extendedKey: Uint8ArrayLike
+): Promise<SignEd25519Result>
 {
-    if (signature.length !== 64 || publicKey.length != 32)
+    if(!(await ensureNativeSupport())) return signExtendedEd25519_sync( _message, _extendedKey );
+    const message        = forceUint8Array( _message );
+    const privateKeyHash = forceUint8Array( _extendedKey );
+
+    if( privateKeyHash.length !== 64 )
+    throw new Error('nativeExtendedSignEd25519:: extended key must have length 64');
+
+    const a = scalarFromBytes( privateKeyHash );
+    const pubKey = bigpointToByteArray(
+        scalarMul(BASE, a)
+    );
+
+    const signature = await nativeEd25519Sign( privateKeyHash, message );
+    return {
+        0: pubKey,
+        1: signature,
+        length: 2,
+        [Symbol.iterator]: function* () {
+            yield pubKey;
+            yield signature;
+        },
+        pubKey,
+        signature
+    };
+}
+
+/** sign a message with a (64 bytes) private key */
+export const signExtendedEd25519: typeof nativeExtendedSignEd25519  = __hasNativeSupport ? nativeExtendedSignEd25519 : wrapped_signExtendedEd25519_sync;
+
+/** sign a message with a (32 bytes) private key */
+export function getEd25519Signature_sync( message: Uint8ArrayLike, privateKey: Uint8ArrayLike ): Uint8Array
+{
+    return signEd25519_sync( message, privateKey ).signature;
+}
+
+function wrapped_getEd25519Signature_sync( message: Uint8ArrayLike, privateKey: Uint8ArrayLike ): Promise<Uint8Array>
+{
+    return Promise.resolve( getEd25519Signature_sync( message, privateKey ) );
+}
+
+/** sign a message with a (32 bytes) private key */
+export const getEd25519Signature: typeof nativeEd25519Sign = __hasNativeSupport ? nativeEd25519Sign : wrapped_getEd25519Signature_sync; 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////// 
+//-------------------------------------------------------------------------------------------------// 
+//------------------------------------------- verifying -------------------------------------------// 
+//-------------------------------------------------------------------------------------------------// 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export function verifyEd25519Signature_sync(
+    _signature: Uint8ArrayLike,
+    _message: Uint8ArrayLike,
+    _publicKey: Uint8ArrayLike
+): boolean
+{
+    const signature   = forceUint8Array( _signature );
+    const message     = forceUint8Array( _message );
+    const publicKey   = forceUint8Array( _publicKey );
+    if( signature.length !== 64 || publicKey.length !== 32 )
     {
         throw new Error(`unexpected signature length ${signature.length}`);
     }
     
-    if( isUint8Array( signature ) )
-    {
-        signature = buffToByteArr( signature );
-    }
-
-    if( isUint8Array( message ) )
-    {
-        message = buffToByteArr( message );
-    }
-
-    if( isUint8Array( publicKey ) )
-    {
-        publicKey = buffToByteArr( publicKey );
-    }
-
-    const R = pointFromBytes( asBytes( signature ).slice(0, 32));
-    const A = pointFromBytes( asBytes( publicKey ));
-    const S = decodeInt( asBytes( signature ).slice(32, 64) );
-    const h = ihash( asBytes( signature ).slice(0, 32).concat( asBytes( publicKey ) ).concat( asBytes( message ) ));
+    const R_bytes = forceUint8Array( signature ).slice(0, 32);
+    const R = pointFromBytes( R_bytes );
+    const A = pointFromBytes( forceUint8Array( publicKey ));
+    const S = decodeInt( forceUint8Array( signature ).slice(32, 64) );
+    const h = ihash(
+        concatUint8Array(
+            R_bytes,
+            publicKey,
+            message
+        )
+    );
 
     const left = scalarMul(BASE, S);
     const right = addPointsEdwards(R, scalarMul(A, h));
@@ -354,18 +673,9 @@ export function verifyEd25519Signature(signature: Uint8ArrayLike, message: Uint8
     return (left[0] == right[0]) && (left[1] == right[1]);
 }
 
-const _0n = BigInt( 0 );
-
-const ED25519_ORDER = BigInt(
-    '57896044618658097711785492504343953926634992332820282019728792003956564819949'
-);
-
-function mod(a: bigint, b: bigint): bigint {
-    const result = a % b;
-    return result >= _0n ? result : b + result;
-}
-
-export function ed25519bigint( n: bigint ): bigint
+function wrapped_verifyEd25519Signature_sync( signature: Uint8ArrayLike, message: Uint8ArrayLike, publicKey: Uint8ArrayLike ): Promise<boolean>
 {
-    return mod( n , ED25519_ORDER );
+    return Promise.resolve( verifyEd25519Signature_sync( signature, message, publicKey ) );
 }
+
+export const verifyEd25519Signature: typeof nativeEd25519Verify = __hasNativeSupport ? nativeEd25519Verify : wrapped_verifyEd25519Signature_sync;
