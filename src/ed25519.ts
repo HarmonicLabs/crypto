@@ -315,7 +315,7 @@ export function encodeInt(y: bigint): Uint8Array
     return bigintToBuffer( y, 32 ).reverse();
 }
 
-function decodeInt(s: Uint8Array | Uint8Array): bigint {
+function decodeInt(s: Uint8Array ): bigint {
     return BigInt(
         "0x" + byteArrToHex( s.reverse() )
     );
@@ -351,12 +351,12 @@ function isOnCurve(point: bigpoint): boolean
     return (-xx + yy - BigInt( 1 ) - D*xx*yy) % Q == BigInt( 0 );
 }
 
-export function pointFromBytes(s: Uint8Array | Uint8Array): bigpoint
+export function pointFromBytes( s: Uint8Array ): bigpoint
 {
-    if( s instanceof Uint8Array ) s = forceUint8Array( s );
-    assert(s.length == 32, "point must have length of 32");
+    if(!( s instanceof Uint8Array )) s = forceUint8Array( s );
+    // assert(s.length === 32, "point must have length of 32; point length:" + s.length);
 
-    const bytes = s.slice();
+    const bytes = s.slice(0,32);
     bytes[31] = (bytes[31] & 0b01111111) as byte;
 
     const y = decodeInt(bytes);
@@ -375,7 +375,7 @@ export function pointFromBytes(s: Uint8Array | Uint8Array): bigpoint
 
 const ipow2_253 = BigInt( "28948022309329048855892746252171976963317496166410141009864396001978282409984" ); // ipow2(253)
 
-export function scalarFromBytes(h: Uint8Array | Uint8Array): bigint
+export function scalarFromBytes(h: Uint8Array ): bigint
 {
     const bytes = h.slice(0, 32);
     bytes[0]  = (bytes[ 0  ] & 0b11111000) as byte;
@@ -384,6 +384,14 @@ export function scalarFromBytes(h: Uint8Array | Uint8Array): bigint
     return ipow2_253 + BigInt( 
         "0x" + byteArrToHex( bytes.reverse() )
     );
+}
+
+export function scalarToBytes(s: bigint): Uint8Array
+{
+    s = positiveMod(s, CURVE_ORDER);
+    const bytes = encodeInt(s);
+    bytes.reverse();
+    return bytes;
 }
 
 function ihash( m: Uint8Array ): bigint
@@ -413,12 +421,16 @@ export function scalarMultBase( scalar: bigint ): bigpoint
 //------------------------------------------------------------------------------------------------------// 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
-export function getExtendEd25519PrivateKeyComponents_sync( privateKey: Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
+export function getExtendEd25519PrivateKeyComponentsAsBytes_sync( privateKey: Uint8Array ): [ scalar: Uint8Array, extension: Uint8Array ]
 {
     const extended = sha2_512_sync(privateKey);
-    const extension = extended.slice(32, 64);
-    const a = scalarFromBytes(extended.slice(0, 32));
-    return [ a, extension ]
+    return [ extended.slice(0, 32), extended.slice(32, 64) ]
+}
+
+export function getExtendEd25519PrivateKeyComponents_sync( privateKey: Uint8Array ): [ scalar: bigint, extension: Uint8Array ]
+{
+    const [ a_bytes, extension ] = getExtendEd25519PrivateKeyComponentsAsBytes_sync( privateKey );
+    return [ scalarFromBytes( a_bytes ), extension ]
 }
 
 export function getExtendedEd25519PrivateKey_sync( privateKey: Uint8Array ): Uint8Array

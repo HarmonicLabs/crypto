@@ -15,7 +15,7 @@ this repo targets ES5+
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 // Abelian group utilities
 import { IField, validateField, nLength } from './modular';
-import { validateObject } from './utils';
+import { bitLen, validateObject } from './utils';
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 
@@ -39,32 +39,69 @@ export type GroupConstructor<T> = {
 };
 export type Mapper<T> = (i: T[]) => T[];
 
-// Elliptic curve multiplication of Point by scalar. Fragile.
-// Scalars should always be less than curve order: this should be checked inside of a curve itself.
-// Creates precomputation tables for fast multiplication:
-// - private scalar is split by fixed size windows of W bits
-// - every window point is collected from window's table & added to accumulator
-// - since windows are different, same point inside tables won't be accessed more than once per calc
-// - each multiplication is 'Math.ceil(CURVE_ORDER / 𝑊) + 1' point additions (fixed for any scalar)
-// - +1 window is neccessary for wNAF
-// - wNAF reduces table size: 2x less memory + 2x faster generation, but 10% slower multiplication
-// TODO: Research returning 2d JS array of windows, instead of a single window. This would allow
-// windows to be in different memory locations
-export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
-  const constTimeNegate = (condition: boolean, item: T): T => {
-    const neg = item.negate();
-    return condition ? neg : item;
-  };
-  const opts = (W: number) => {
-    const windows = Math.ceil(bits / W) + 1; // +1, because
-    const windowSize = 2 ** (W - 1); // -1 because we skip zero
-    return { windows, windowSize };
-  };
+// Since points in different groups cannot be equal (different object constructor),
+// we can have single place to store precomputes
+const pointPrecomputes = new WeakMap<any, any[]>();
+const pointWindowSizes = new WeakMap<any, number>(); // This allows use make points immutable (nothing changes inside)
+
+function getW(P: any): number {
+  return pointWindowSizes.get(P) || 1;
+}
+
+export type IWNAF<T extends Group<T>> = {
+  constTimeNegate: <T extends Group<T>>(condition: boolean, item: T) => T;
+  hasPrecomputes(elm: T): boolean;
+  unsafeLadder(elm: T, n: bigint, p?: T): T;
+  precomputeWindow(elm: T, W: number): Group<T>[];
+  wNAF(W: number, precomputes: T[], n: bigint): { p: T; f: T };
+  wNAFUnsafe(W: number, precomputes: T[], n: bigint, acc?: T): T;
+  getPrecomputes(W: number, P: T, transform: Mapper<T>): T[];
+  wNAFCached(P: T, n: bigint, transform: Mapper<T>): { p: T; f: T };
+  wNAFCachedUnsafe(P: T, n: bigint, transform: Mapper<T>, prev?: T): T;
+  setWindowSize(P: T, W: number): void;
+};
+
+function constTimeNegate<T extends Group<T>>(condition: boolean, item: T): T {
+  const neg = item.negate();
+  return condition ? neg : item;
+}
+
+function validateW(W: number, bits: number) {
+  if (!Number.isSafeInteger(W) || W <= 0 || W > bits)
+    throw new Error('invalid window size, expected [1..' + bits + '], got W=' + W);
+}
+
+function calcWOpts(W: number, bits: number) {
+  validateW(W, bits);
+  const windows = Math.ceil(bits / W) + 1; // +1, because
+  const windowSize = 2 ** (W - 1); // -1 because we skip zero
+  return { windows, windowSize };
+}
+
+/**
+ * Elliptic curve multiplication of Point by scalar. Fragile.
+ * Scalars should always be less than curve order: this should be checked inside of a curve itself.
+ * Creates precomputation tables for fast multiplication:
+ * - private scalar is split by fixed size windows of W bits
+ * - every window point is collected from window's table & added to accumulator
+ * - since windows are different, same point inside tables won't be accessed more than once per calc
+ * - each multiplication is 'Math.ceil(CURVE_ORDER / 𝑊) + 1' point additions (fixed for any scalar)
+ * - +1 window is neccessary for wNAF
+ * - wNAF reduces table size: 2x less memory + 2x faster generation, but 10% slower multiplication
+ *
+ * @todo Research returning 2d JS array of windows, instead of a single window.
+ * This would allow windows to be in different memory locations
+ */
+export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number): IWNAF<T> {
   return {
     constTimeNegate,
+
+    hasPrecomputes(elm: T) {
+      return getW(elm) !== 1;
+    },
+
     // non-const time multiplication ladder
-    unsafeLadder(elm: T, n: bigint) {
-      let p = c.ZERO;
+    unsafeLadder(elm: T, n: bigint, p = c.ZERO) {
       let d: T = elm;
       while (n > _0n) {
         if (n & _1n) p = p.add(d);
@@ -82,10 +119,12 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
      * - 𝑊 is the window size
      * - 𝑛 is the bitlength of the curve order.
      * For a 256-bit curve and window size 8, the number of precomputed points is 128 * 33 = 4224.
+     * @param elm Point instance
+     * @param W window size
      * @returns precomputed point tables flattened to a single array
      */
     precomputeWindow(elm: T, W: number): Group<T>[] {
-      const { windows, windowSize } = opts(W);
+      const { windows, windowSize } = calcWOpts(W, bits);
       const points: T[] = [];
       let p: T = elm;
       let base = p;
@@ -112,7 +151,7 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
     wNAF(W: number, precomputes: T[], n: bigint): { p: T; f: T } {
       // TODO: maybe check that scalar is less than group order? wNAF behavious is undefined otherwise
       // But need to carefully remove other checks before wNAF. ORDER == bits here
-      const { windows, windowSize } = opts(W);
+      const { windows, windowSize } = calcWOpts(W, bits);
 
       let p = c.ZERO;
       let f = c.BASE;
@@ -163,18 +202,70 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number) {
       return { p, f };
     },
 
-    wNAFCached(P: T, precomputesMap: Map<T, T[]>, n: bigint, transform: Mapper<T>): { p: T; f: T } {
-      // @ts-ignore
-      const W: number = P._WINDOW_SIZE || 1;
+    /**
+     * Implements ec unsafe (non const-time) multiplication using precomputed tables and w-ary non-adjacent form.
+     * @param W window size
+     * @param precomputes precomputed tables
+     * @param n scalar (we don't check here, but should be less than curve order)
+     * @param acc accumulator point to add result of multiplication
+     * @returns point
+     */
+    wNAFUnsafe(W: number, precomputes: T[], n: bigint, acc: T = c.ZERO): T {
+      const { windows, windowSize } = calcWOpts(W, bits);
+      const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+      const maxNumber = 2 ** W;
+      const shiftBy = BigInt(W);
+      for (let window = 0; window < windows; window++) {
+        const offset = window * windowSize;
+        if (n === _0n) break; // No need to go over empty scalar
+        // Extract W bits.
+        let wbits = Number(n & mask);
+        // Shift number by W bits.
+        n >>= shiftBy;
+        // If the bits are bigger than max size, we'll split those.
+        // +224 => 256 - 32
+        if (wbits > windowSize) {
+          wbits -= maxNumber;
+          n += _1n;
+        }
+        if (wbits === 0) continue;
+        let curr = precomputes[offset + Math.abs(wbits) - 1]; // -1 because we skip zero
+        if (wbits < 0) curr = curr.negate();
+        // NOTE: by re-using acc, we can save a lot of additions in case of MSM
+        acc = acc.add(curr);
+      }
+      return acc;
+    },
+
+    getPrecomputes(W: number, P: T, transform: Mapper<T>): T[] {
       // Calculate precomputes on a first run, reuse them after
-      let comp = precomputesMap.get(P);
+      let comp = pointPrecomputes.get(P);
       if (!comp) {
         comp = this.precomputeWindow(P, W) as T[];
-        if (W !== 1) {
-          precomputesMap.set(P, transform(comp));
-        }
+        if (W !== 1) pointPrecomputes.set(P, transform(comp));
       }
-      return this.wNAF(W, comp, n);
+      return comp;
+    },
+
+    wNAFCached(P: T, n: bigint, transform: Mapper<T>): { p: T; f: T } {
+      const W = getW(P);
+      return this.wNAF(W, this.getPrecomputes(W, P, transform), n);
+    },
+
+    wNAFCachedUnsafe(P: T, n: bigint, transform: Mapper<T>, prev?: T): T {
+      const W = getW(P);
+      if (W === 1) return this.unsafeLadder(P, n, prev); // For W=1 ladder is ~x2 faster
+      return this.wNAFUnsafe(W, this.getPrecomputes(W, P, transform), n, prev);
+    },
+
+    // We calculate precomputes for elliptic curve point multiplication
+    // using windowed method. This specifies window size and
+    // stores precomputed values. Usually only base point would be precomputed.
+
+    setWindowSize(P: T, W: number) {
+      validateW(W, bits);
+      pointWindowSizes.set(P, W);
+      pointPrecomputes.delete(P);
     },
   };
 }
@@ -214,4 +305,68 @@ export function validateBasic<FP, T>(curve: BasicCurve<FP> & T) {
     ...curve,
     ...{ p: curve.Fp.ORDER },
   } as const);
+}
+
+function validateMSMPoints(points: any[], c: any) {
+  if (!Array.isArray(points)) throw new Error('array expected');
+  points.forEach((p, i) => {
+    if (!(p instanceof c)) throw new Error('invalid point at index ' + i);
+  });
+}
+function validateMSMScalars(scalars: any[], field: any) {
+  if (!Array.isArray(scalars)) throw new Error('array of scalars expected');
+  scalars.forEach((s, i) => {
+    if (!field.isValid(s)) throw new Error('invalid scalar at index ' + i);
+  });
+}
+/**
+ * Pippenger algorithm for multi-scalar multiplication (MSM, Pa + Qb + Rc + ...).
+ * 30x faster vs naive addition on L=4096, 10x faster with precomputes.
+ * For N=254bit, L=1, it does: 1024 ADD + 254 DBL. For L=5: 1536 ADD + 254 DBL.
+ * Algorithmically constant-time (for same L), even when 1 point + scalar, or when scalar = 0.
+ * @param c Curve Point constructor
+ * @param fieldN field over CURVE.N - important that it's not over CURVE.P
+ * @param points array of L curve points
+ * @param scalars array of L scalars (aka private keys / bigints)
+ */
+export function pippenger<T extends Group<T>>(
+  c: GroupConstructor<T>,
+  fieldN: IField<bigint>,
+  points: T[],
+  scalars: bigint[]
+): T {
+  // If we split scalars by some window (let's say 8 bits), every chunk will only
+  // take 256 buckets even if there are 4096 scalars, also re-uses double.
+  // TODO:
+  // - https://eprint.iacr.org/2024/750.pdf
+  // - https://tches.iacr.org/index.php/TCHES/article/view/10287
+  // 0 is accepted in scalars
+  validateMSMPoints(points, c);
+  validateMSMScalars(scalars, fieldN);
+  if (points.length !== scalars.length)
+    throw new Error('arrays of points and scalars must have equal length');
+  const zero = c.ZERO;
+  const wbits = bitLen(BigInt(points.length));
+  const windowSize = wbits > 12 ? wbits - 3 : wbits > 4 ? wbits - 2 : wbits ? 2 : 1; // in bits
+  const MASK = (1 << windowSize) - 1;
+  const buckets = new Array(MASK + 1).fill(zero); // +1 for zero array
+  const lastBits = Math.floor((fieldN.BITS - 1) / windowSize) * windowSize;
+  let sum = zero;
+  for (let i = lastBits; i >= 0; i -= windowSize) {
+    buckets.fill(zero);
+    for (let j = 0; j < scalars.length; j++) {
+      const scalar = scalars[j];
+      const wbits = Number((scalar >> BigInt(i)) & BigInt(MASK));
+      buckets[wbits] = buckets[wbits].add(points[j]);
+    }
+    let resI = zero; // not using this will do small speed-up, but will lose ct
+    // Skip first bucket, because it is zero
+    for (let j = buckets.length - 1, sumI = zero; j > 0; j--) {
+      sumI = sumI.add(buckets[j]);
+      resI = resI.add(sumI);
+    }
+    sum = sum.add(resI);
+    if (i !== 0) for (let j = 0; j < windowSize; j++) sum = sum.double();
+  }
+  return sum as T;
 }

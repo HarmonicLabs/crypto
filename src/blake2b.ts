@@ -267,7 +267,7 @@ function blake2bFinal( ctx: Blake2bCtx )
 }
 
 
-export function blake2b( data: byte[] | Uint8Array | Uint8Array, digestSize: SupportedDigestSize = 32 ): Uint8Array
+export function blake2b( data: byte[] | Uint8Array , digestSize: SupportedDigestSize = 32 ): Uint8Array
 {
     data = new Uint8Array(data);
     const ctx = blake2bInit(digestSize)

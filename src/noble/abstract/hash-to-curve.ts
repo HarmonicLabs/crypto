@@ -205,6 +205,8 @@ export type MapToCurve<T> = (scalar: bigint[]) => AffinePoint<T>;
 // (changing DST is ok!)
 export type htfBasicOpts = { DST: UnicodeOrBytes };
 
+export type HTFMethod<ReturnT> = (msg: Uint8Array, options?: htfBasicOpts) => H2CPoint<ReturnT>;
+
 export function createHasher<T>(
   Point: H2CPointConstructor<T>,
   mapToCurve: MapToCurve<T>,

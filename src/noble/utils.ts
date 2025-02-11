@@ -48,7 +48,7 @@ export const byteSwapIfBE = isLE ? (n: number) => n : (n: number) => byteSwap(n)
 // In place byte swap for Uint32Array
 export function byteSwap32(arr: Uint32Array) {
     for (let i = 0; i < arr.length; i++) {
-       arr[i] = byteSwap(arr[i]);
+        arr[i] = byteSwap(arr[i]);
     }
 }
 
@@ -102,7 +102,7 @@ export function hexToBytes(hex: string): Uint8Array {
 // There is no setImmediate in browser and setTimeout is slow.
 // call of async fn will return Promise, which will be fullfiled only on
 // next scheduler queue processing step and this is exactly what we need.
-export const nextTick = async () => {};
+export const nextTick = async () => { };
 
 // Returns control to thread each 'tick' ms to avoid blocking
 export async function asyncLoop(iters: number, tick: number, cb: (i: number) => void) {
@@ -139,15 +139,15 @@ export function toBytes(data: Input): Uint8Array {
 export function concatBytes(...arrays: Uint8Array[]): Uint8Array {
     let sum = 0;
     for (let i = 0; i < arrays.length; i++) {
-      const a = arrays[i];
-      assertBytes(a);
-      sum += a.length;
+        const a = arrays[i];
+        assertBytes(a);
+        sum += a.length;
     }
     const res = new Uint8Array(sum);
     for (let i = 0, pad = 0; i < arrays.length; i++) {
-      const a = arrays[i];
-      res.set(a, pad);
-      pad += a.length;
+        const a = arrays[i];
+        res.set(a, pad);
+        pad += a.length;
     }
     return res;
 }
@@ -198,7 +198,7 @@ export function checkOpts<T1 extends EmptyObj, T2 extends EmptyObj>(
     opts?: T2
 ): T1 & T2 {
     if (opts !== undefined && toStr.call(opts) !== '[object Object]')
-      throw new Error('Options should be object or undefined');
+        throw new Error('Options should be object or undefined');
     const merged = Object.assign(defaults, opts);
     return merged as T1 & T2;
 }
@@ -239,10 +239,13 @@ export function wrapXOFConstructorWithOpts<H extends HashXOF<H>, T extends Objec
 /**
  * Secure PRNG. Uses `crypto.getRandomValues`, which defers to OS.
  */
-export function randomBytes(bytesLength = 32): Uint8Array
-{
+export function randomBytes(bytesLength = 32): Uint8Array {
     if (crypto && typeof crypto.getRandomValues === 'function') {
         return crypto.getRandomValues(new Uint8Array(bytesLength));
     }
-    throw new Error('crypto.getRandomValues must be defined');
+    const bytes = new Uint8Array(bytesLength);
+    for (let i = 0; i < bytesLength; i++) {
+        bytes[i] = Math.floor(Math.random() * 256);
+    }
+    return bytes;
 }

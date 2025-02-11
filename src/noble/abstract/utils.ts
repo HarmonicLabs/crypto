@@ -30,13 +30,6 @@ export type CHash = {
 };
 export type FHash = (message: Uint8Array | string) => Uint8Array;
 
-export function isBytes(a: unknown): a is Uint8Array {
-  return (
-    a instanceof Uint8Array ||
-    (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array')
-  );
-}
-
 export function abytes(item: unknown): void {
   if (!isBytes(item)) throw new Error('Uint8Array expected');
 }
@@ -331,3 +324,50 @@ export function validateObject<T extends Record<string, any>>(
 // const z2 = validateObject(o, { a: 'isSafeInteger' }, { c: 'zz' });
 // const z3 = validateObject(o, { test: 'boolean', z: 'bug' });
 // const z4 = validateObject(o, { a: 'boolean', z: 'bug' });
+
+/**
+ * Memoizes (caches) computation result.
+ * Uses WeakMap: the value is going auto-cleaned by GC after last reference is removed.
+ */
+export function memoized<T extends object, R, O extends any[]>(
+  fn: (arg: T, ...args: O) => R
+): (arg: T, ...args: O) => R {
+  const map = new WeakMap<T, R>();
+  return (arg: T, ...args: O): R => {
+    const val = map.get(arg);
+    if (val !== undefined) return val;
+    const computed = fn(arg, ...args);
+    map.set(arg, computed);
+    return computed;
+  };
+}
+
+export function abool(title: string, value: boolean): void {
+  if (typeof value !== 'boolean') throw new Error(title + ' boolean expected, got ' + value);
+}
+
+
+
+export function isBytes(a: unknown): a is Uint8Array {
+  return a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
+}
+
+const isPosBig = (n: bigint) => typeof n === 'bigint' && _0n <= n;
+export function inRange(n: bigint, min: bigint, max: bigint): boolean {
+  return isPosBig(n) && isPosBig(min) && isPosBig(max) && min <= n && n < max;
+}
+
+/**
+* Asserts min <= n < max. NOTE: It's < max and not <= max.
+* @example
+* aInRange('x', x, 1n, 256n); // would assume x is in (1n..255n)
+*/
+export function aInRange(title: string, n: bigint, min: bigint, max: bigint): void {
+  // Why min <= n < max and not a (min < n < max) OR b (min <= n <= max)?
+  // consider P=256n, min=0n, max=P
+  // - a for min=0 would require -1:          `inRange('x', x, -1n, P)`
+  // - b would commonly require subtraction:  `inRange('x', x, 0n, P - 1n)`
+  // - our way is the cleanest:               `inRange('x', x, 0n, P)
+  if (!inRange(n, min, max))
+      throw new Error('expected valid ' + title + ': ' + min + ' <= n < ' + max + ', got ' + n);
+}

@@ -1,6 +1,9 @@
 https://github.com/dchest/tweetnacl-js
 https://chatgpt.com/share/67a81016-eba4-8004-813b-2e6c6232d647
 
+Amaru `vrf_dalek`:
+https://github.com/txpipe/vrf
+
 WASM:
 https://github.com/jedisct1/rust-ed25519-compact
 https://github.com/dalek-cryptography/ed25519-dalek

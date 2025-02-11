@@ -121,11 +121,11 @@ async function ensureNativeSupport(): Promise<boolean>
  * @param {number[]} bytes - list of uint8 numbers
  * @returns {number[]} - list of uint8 numbers
  */
-export function sha2_512_sync( bytes: number[] | Uint8Array | ArrayBuffer ): Uint8Array
+export function sha2_512_sync( bytes: number[] | Uint8Array | ArrayBuffer ): Uint8Array & { length: 64 }
 {
     if(!( bytes instanceof Uint8Array )) bytes = new Uint8Array( bytes );
     if(   bytes instanceof ArrayBuffer ) bytes = new Uint8Array( bytes );
-    return sha512( bytes as Uint8Array );
+    return sha512( bytes as Uint8Array ) as (Uint8Array & { length: 64 });
 }
 
 function wrapped_sha2_512_sync( bytes: Uint8Array | ArrayBuffer ): Promise<Uint8Array>
