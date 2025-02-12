@@ -11,8 +11,11 @@ function innerConditionalAssign( self: bigint, other: bigint, choice: boolean ):
 {
     // if choice = 0, mask = (-0) = 0000...0000
     // if choice = 1, mask = (-1) = 1111...1111
-    // const mask = choice ? BigInt("1".repeat(64)) : BigInt( 0 );
-    return self ^ ( choice ? ( self ^ other ) : BigInt( 0 ) );
+    // return self ^ ( choice ? ( self ^ other ) : BigInt( 0 ) );
+    // const mask = choice ? (BigInt(1) << BigInt(64)) - BigInt(1) : BigInt( 0 );
+    // return self ^ ( mask & ( self ^ other ) );
+
+    return choice ? other : self;
 }
 
 export class FieldElem51
@@ -20,19 +23,6 @@ export class FieldElem51
     constructor(
         readonly bytes: BigUint64Array
     ) {}
-
-    toDbg()
-    {
-        return toHex(
-            this.toBytes()
-            // new Uint8Array(
-            //     this.bytes.buffer,
-            //     this.bytes.byteLength,
-            //     this.bytes.byteOffset
-            // )
-        );
-    }
-
 
     static zero(): FieldElem51
     {
@@ -164,6 +154,7 @@ export class FieldElem51
         // let Atemp = FieldElement::conditional_select(&MONTGOMERY_A, &zero, eps_is_sq); /* 0, or A if nonsquare*/
         const Atemp = FieldElem51.conditional_select( MONTGOMERY_A, zero, eps_is_sq );
         let u = d.add( Atemp );
+
         u.conditional_negate( !eps_is_sq );
     
         return new MontgomeryPoint( u.toBytes() );
@@ -642,11 +633,11 @@ export class FieldElem51
         const b3_19 = b[ 3 ] * BigInt( 19 );
         const b4_19 = b[ 4 ] * BigInt( 19 );
 
-        let c0: bigint = ( a[ 0 ] * b[ 0 ] ) + ( a[ 4 ] * b1_19  ) + ( a[ 3 ] * b2_19  ) + ( a[ 2 ] * b3_19  ) + ( a[ 1 ] * b4_19  );
-        let c1: bigint = ( a[ 1 ] * b[ 0 ] ) + ( a[ 0 ] * b[ 1 ] ) + ( a[ 4 ] * b2_19  ) + ( a[ 3 ] * b3_19  ) + ( a[ 2 ] * b4_19  );
-        let c2: bigint = ( a[ 2 ] * b[ 0 ] ) + ( a[ 1 ] * b[ 1 ] ) + ( a[ 0 ] * b[ 2 ] ) + ( a[ 4 ] * b3_19  ) + ( a[ 3 ] * b4_19  );
-        let c3: bigint = ( a[ 3 ] * b[ 0 ] ) + ( a[ 2 ] * b[ 1 ] ) + ( a[ 1 ] * b[ 2 ] ) + ( a[ 0 ] * b[ 3 ] ) + ( a[ 4 ] * b4_19  );
-        let c4: bigint = ( a[ 4 ] * b[ 0 ] ) + ( a[ 3 ] * b[ 1 ] ) + ( a[ 2 ] * b[ 2 ] ) + ( a[ 1 ] * b[ 3 ] ) + ( a[ 0 ] * b[ 4 ] );
+        let c0: bigint = ( a[0] * b[0] ) + ( a[4] * b1_19 ) + ( a[3] * b2_19 ) + ( a[2] * b3_19 ) + ( a[1] * b4_19 );
+        let c1: bigint = ( a[1] * b[0] ) + ( a[0] * b[1]  ) + ( a[4] * b2_19 ) + ( a[3] * b3_19 ) + ( a[2] * b4_19 );
+        let c2: bigint = ( a[2] * b[0] ) + ( a[1] * b[1]  ) + ( a[0] * b[2]  ) + ( a[4] * b3_19 ) + ( a[3] * b4_19 );
+        let c3: bigint = ( a[3] * b[0] ) + ( a[2] * b[1]  ) + ( a[1] * b[2]  ) + ( a[0] * b[3]  ) + ( a[4] * b4_19 );
+        let c4: bigint = ( a[4] * b[0] ) + ( a[3] * b[1]  ) + ( a[2] * b[2]  ) + ( a[1] * b[3]  ) + ( a[0] * b[4]  );
 
         const LOW_51_BIT_MASK: bigint = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
         let out: BigUint64Array = new BigUint64Array( 5 );
@@ -880,6 +871,14 @@ export class FieldElem51
     {
         let self_neg = this.neg();
         return this.conditional_assign( self_neg, choice );
+
+        // the above should have been the proper implementation
+        // however it was NOT negating for some reason
+    
+        // this implementation should be equivalent to the intended implementation
+        // with the exception that it is not constant
+        // const self_neg = this.neg();
+        // if( choice ) (this as any).bytes = self_neg.bytes;
     }
 
     /*
@@ -906,6 +905,13 @@ export class FieldElem51
         this.bytes[2] = innerConditionalAssign( this.bytes[2], other.bytes[2], choice );
         this.bytes[3] = innerConditionalAssign( this.bytes[3], other.bytes[3], choice );
         this.bytes[4] = innerConditionalAssign( this.bytes[4], other.bytes[4], choice );
+
+        // the above was giving problems
+        // I'm not sure this is constant time
+        // but it should at least be close to it
+        // if( choice ) (this as any).bytes = other.bytes.slice();
+        // else (this as any).bytes = this.bytes.slice();
+
         // return this;
     }
 
@@ -923,7 +929,8 @@ export class FieldElem51
     */
     neg(): FieldElem51
     {
-        return this.negate();
+        const output = this.clone();
+        return output.negate();
     }
 
     /*
@@ -1409,6 +1416,65 @@ export class EdwardsPoint
         readonly T: FieldElem51
     ) {}
 
+
+    static get DOUBLE_BASE_COMPRESSED(): Uint8Array
+    {
+        return new Uint8Array([0xc9, 0xa3, 0xf8, 0x6a, 0xae, 0x46, 0x5f, 0xe,
+            0x56, 0x51, 0x38, 0x64, 0x51, 0x0f, 0x39, 0x97,
+            0x56, 0x1f, 0xa2, 0xc9, 0xe8, 0x5e, 0xa2, 0x1d,
+            0xc2, 0x29, 0x23, 0x09, 0xf3, 0xcd, 0x60, 0x22]);
+    }
+
+    static get BASEPOINT_ED25519_COMPRESSED(): Uint8Array
+    {
+        return new Uint8Array([0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+            0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+            0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+            0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66]);
+    }
+
+    static get BASEPOINT_ED25519(): EdwardsPoint
+    {
+        return new EdwardsPoint(
+            new FieldElem51(new BigUint64Array([
+                BigInt( "1738742601995546" ),
+                BigInt( "1146398526822698" ),
+                BigInt( "2070867633025821" ),
+                BigInt( "562264141797630" ),
+                BigInt( "587772402128613" ),
+            ])),
+            new FieldElem51(new BigUint64Array([
+                BigInt( "1801439850948184" ),
+                BigInt( "1351079888211148" ),
+                BigInt( "450359962737049" ),
+                BigInt( "900719925474099" ),
+                BigInt( "1801439850948198" ),
+            ])),
+            new FieldElem51(new BigUint64Array([
+                BigInt( "1" ),
+                BigInt( "0" ),
+                BigInt( "0" ),
+                BigInt( "0" ),
+                BigInt( "0" )
+            ])),
+            new FieldElem51(new BigUint64Array([
+                BigInt( "1841354044333475" ),
+                BigInt( "16398895984059" ),
+                BigInt( "755974180946558" ),
+                BigInt( "900171276175154" ),
+                BigInt( "1821297809914039" ),
+            ])),
+        );
+    }
+
+    is_valid(): boolean
+    {
+        const on_curve = this.toProjective().is_valid();
+        const on_ceger_image = this.X.mul( this.Y ).ct_eq( this.Z.mul( this.T ) );
+
+        return on_curve && on_ceger_image;
+    }
+
     /*
     fn optional_multiscalar_mul<I, J>(scalars: I, points: J) -> Option<EdwardsPoint>
     where
@@ -1633,6 +1699,7 @@ pub fn mul(a: &Scalar, A: &EdwardsPoint, b: &Scalar) -> EdwardsPoint {
     {
         const Y_plus_X = this.Y.add( this.X );
         const Y_minus_X = this.Y.sub( this.X );
+
         const PP = Y_plus_X.mul( other.Y_plus_X );
         const MM = Y_minus_X.mul( other.Y_minus_X );
         const TT2d = this.T.mul( other.T2d );
@@ -1669,6 +1736,7 @@ pub fn mul(a: &Scalar, A: &EdwardsPoint, b: &Scalar) -> EdwardsPoint {
     {
         const Y_plus_X = this.Y.add( this.X );
         const Y_minus_X = this.Y.sub( this.X );
+
         const PM = Y_plus_X.mul( other.Y_minus_X );
         const MP = Y_minus_X.mul( other.Y_plus_X );
         const TT2d = this.T.mul( other.T2d );
@@ -1807,6 +1875,13 @@ pub fn mul(a: &Scalar, A: &EdwardsPoint, b: &Scalar) -> EdwardsPoint {
         return s;
     }
 
+    compressed_is_negative(): boolean
+    {
+        const recip = this.Z.invert();
+        const x = this.X.mul( recip );
+        return x.is_negative();
+    }
+
     /*
     /// Compute \\([2\^k] P \\) by successive doublings. Requires \\( k > 0 \\).
     pub(crate) fn mul_by_pow_2(&self, k: u32) -> EdwardsPoint {
@@ -1892,26 +1967,37 @@ pub fn mul(a: &Scalar, A: &EdwardsPoint, b: &Scalar) -> EdwardsPoint {
         tmp1.to_extended()
     }
     */
+    /*
+    */
     scalarMul( scalar: Uint8Array ): EdwardsPoint
     {
         const lookup_table = ProjectiveNielsPoint.tableFromEdwardPoint( this );
+
         const scalar_digits = scalar_to_radix_16( scalar );
 
-        let tmp2: ProjectivePoint;
+        let tmp2: ProjectivePoint = ProjectivePoint.IDENTITY;
         let tmp3 = EdwardsPoint.IDENTITY;
         let tmp1 = tmp3.addProjectiveNiels( lookup_table.select( scalar_digits[ 63 ] ) );
+        
         for( let i = 62; i >= 0; i-- )
         {
             tmp2 = tmp1.toProjective();
             tmp1 = tmp2.double();
+
             tmp2 = tmp1.toProjective();
             tmp1 = tmp2.double();
+
             tmp2 = tmp1.toProjective();
             tmp1 = tmp2.double();
+
             tmp2 = tmp1.toProjective();
             tmp1 = tmp2.double();
+
             tmp3 = tmp1.toExtended();
-            tmp1 = tmp3.addProjectiveNiels( lookup_table.select( scalar_digits[ i ] ) );
+
+            tmp1 = tmp3.addProjectiveNiels(
+                lookup_table.select( scalar_digits[i] )
+            );
         }
 
         return tmp1.toExtended();
@@ -2024,6 +2110,33 @@ export class ProjectiveNielsPoint
         readonly T2d: FieldElem51
     ) {}
 
+    clone(): ProjectiveNielsPoint
+    {
+        return new ProjectiveNielsPoint(
+            this.Y_plus_X.clone(),
+            this.Y_minus_X.clone(),
+            this.Z.clone(),
+            this.T2d.clone()
+        );
+    }
+
+    /** not really, but useful to debug */
+    compress()
+    {
+        return EdwardsPoint.IDENTITY
+        .addProjectiveNiels( this )
+        .toExtended()
+        .compress();
+    }
+
+    compressed_is_negative(): boolean
+    {
+        return EdwardsPoint.IDENTITY
+        .addProjectiveNiels( this )
+        .toExtended()
+        .compressed_is_negative();
+    }
+
     static identity(): ProjectiveNielsPoint
     {
         return new ProjectiveNielsPoint(
@@ -2040,13 +2153,59 @@ export class ProjectiveNielsPoint
      * **I FOUND NO IMPLEMENTATION** (Thanks generics)
      * 
      * I am ASSUMING this is what is meant to happen
+     * 
+     * Update: 
+     * 
+     * I HAD TO FUCKING REVERSE ENGENEER THIS SHIT
+     * 
+     * WHO THE FUCK TOUGHT MACROS WERE A GOOD IDEA IN RUST?
      */
     conditional_negate( choice: boolean ): void
     {
-        this.Y_plus_X.conditional_negate( choice );
-        this.Y_minus_X.conditional_negate( choice );
-        this.Z.conditional_negate( choice );
-        this.T2d.conditional_negate( choice );
+        // this.Y_plus_X.conditional_negate( choice );
+        // this.Y_minus_X.conditional_negate( choice );
+        // this.Z.conditional_negate( choice );
+        // this.T2d.conditional_negate( choice );
+
+        // ??? WTF ???
+        // ??? not even this works ???
+        // ??? WHY ???
+        // 
+        // if( choice )
+        // {
+        //     (this as any).Y_plus_X = this.Y_plus_X.neg();
+        //     (this as any).Y_minus_X = this.Y_minus_X.neg();
+        //     (this as any).Z = this.Z.neg();
+        //     (this as any).T2d = this.T2d.neg();
+        // }
+
+        if( choice )
+        {
+            const neg = this.neg();
+            (this as any).Y_plus_X = neg.Y_plus_X;
+            (this as any).Y_minus_X = neg.Y_minus_X;
+            (this as any).Z = neg.Z;
+            (this as any).T2d = neg.T2d;
+        }
+    }
+
+    /**
+     * 
+     * I HAD TO FUCKING REVERSE ENGENEER THIS SHIT
+     * 
+     * WHO THE FUCK TOUGHT MACROS WERE A GOOD IDEA IN RUST?
+     */
+    neg(): ProjectiveNielsPoint
+    {
+        return new ProjectiveNielsPoint(
+            // swap places minus and plus
+            this.Y_minus_X.clone(),
+            this.Y_plus_X.clone(),
+            // same Z
+            this.Z.clone(),
+            // negate T2d
+            this.T2d.neg()
+        );
     }
 
     /*
@@ -2076,8 +2235,8 @@ export class ProjectiveNielsPoint
     */
     static tableFromEdwardPoint( point: EdwardsPoint ): LookupTableProjectiveNielsPoint
     {
-        const points = [ point.toProjectiveNiels() ];
-        for( let j = 0; j < points.length - 1; j++ )
+        const points = new Array( LookupTableProjectiveNielsPoint.SIZE ).fill( 0 ).map( _ => point.toProjectiveNiels() );
+        for(let j = 0; j < LookupTableProjectiveNielsPoint.CONVERSION_RANGE_MAX; j++)
         {
             points[ j + 1 ] = point.addProjectiveNiels( points[j] ).toExtended().toProjectiveNiels();
         }
@@ -2085,9 +2244,26 @@ export class ProjectiveNielsPoint
     }
 }
 
-class LookupTableProjectiveNielsPoint
+/*
+impl_lookup_table! {
+    Name = LookupTable,        
+    Size = 8,
+    SizeNeg = -8,
+    SizeRange = 1 .. 9,
+    ConversionRange = 0 .. 7
+} // radix-16
+*/
+export class LookupTableProjectiveNielsPoint
 {
     constructor( readonly points: ProjectiveNielsPoint[] ) {}
+
+    static readonly SIZE = 8;
+    static readonly SIZE_NEG = -8;
+    static readonly SIZE_RANGE = [ 1, 2, 3, 4, 5, 6, 7, 8 ];
+    static readonly SIZE_RANGE_MIN = 1;
+    static readonly SIZE_RANGE_MAX = 8;
+    static readonly CONVERSION_RANGE = [ 0, 1, 2, 3, 4, 5, 6, 7 ];
+    static readonly CONVERSION_RANGE_MAX = 7;
 
     /*
     /// Given \\(-8 \leq x \leq 8\\), return \\(xP\\) in constant time.
@@ -2120,19 +2296,28 @@ class LookupTableProjectiveNielsPoint
         // console.assert( pos >= 0 );
         // console.assert( pos < this.points.length );
 
-        const posI16 = pos & 0xffff;
+        const view = new DataView( new ArrayBuffer( 2 ) );
+        view.setUint16( 0, pos & 0xffff, false );
+        const posI16 = view.getInt16( 0, false );
+        // const posU16 = view.getUint16( 0, false );
+
         const xmask = posI16 >> 7;
         const xabs = (posI16 + xmask) ^ xmask;
 
         let t = ProjectiveNielsPoint.identity() as ProjectiveNielsPoint;
-        for( let j = 1; j < this.points.length; j++ )
+        for(
+            let j = LookupTableProjectiveNielsPoint.SIZE_RANGE_MIN;
+            j <= LookupTableProjectiveNielsPoint.SIZE_RANGE_MAX;
+            j++
+        )
         {
             const c = xabs === j;
-            t.conditional_assign( this.points[ j - 1 ], c );
+            t.conditional_assign( this.points[ j - 1 ].clone(), c );
         }
 
         const neg_mask = xmask & 1;
         t.conditional_negate( neg_mask === 1 );
+
         return t;
     }
 }
@@ -2171,18 +2356,19 @@ function scalar_to_radix_16( scalar: Uint8Array ): Int8Array
 {
     // console.assert( scalar[ 31 ] <= 127 );
     const output = new Int8Array( 64 );
+    const u8 = new Uint8Array( output.buffer );
 
     for( let i = 0; i < 32; i++ )
     {
-        output[ 2 * i ]     = ( scalar[ i ] >> 0 ) & 15;
-        output[ 2 * i + 1 ] = ( scalar[ i ] >> 4 ) & 15;
+        u8[ 2 * i ]     = ( scalar[ i ] >> 0 ) & 15;
+        u8[ 2 * i + 1 ] = ( scalar[ i ] >> 4 ) & 15;
     }
 
     for( let i = 0; i < 63; i++ )
     {
-        const carry      = (output[i] + 8) >> 4;
-        output[ i ]     -= carry << 4;
-        output[ i + 1 ] += carry;
+        const carry  = (output[i] + 8) >> 4;
+        u8[ i ]     -= (carry << 4) & 0xff;
+        u8[ i + 1 ] += (carry) & 0xff;
     }
 
     return output;
@@ -2237,6 +2423,16 @@ export class CompletedPoint
         readonly T: FieldElem51
     ) {}
 
+    clone(): CompletedPoint
+    {
+        return new CompletedPoint(
+            this.X.clone(),
+            this.Y.clone(),
+            this.Z.clone(),
+            this.T.clone()
+        );
+    }
+
     /*
     pub fn to_projective(&self) -> ProjectivePoint {
         ProjectivePoint {
@@ -2284,6 +2480,40 @@ export class ProjectivePoint
         readonly Z: FieldElem51
     ) {}
 
+    /*
+    fn is_valid(&self) -> bool {
+        // Curve equation is    -x^2 + y^2 = 1 + d*x^2*y^2,
+        // homogenized as (-X^2 + Y^2)*Z^2 = Z^4 + d*X^2*Y^2
+        let XX = self.X.square();
+        let YY = self.Y.square();
+        let ZZ = self.Z.square();
+        let ZZZZ = ZZ.square();
+        let lhs = &(&YY - &XX) * &ZZ;
+        let rhs = &ZZZZ + &(&constants::EDWARDS_D * &(&XX * &YY));
+
+        lhs == rhs
+    }
+    */
+    is_valid()
+    {
+        const XX = this.X.square();
+        const YY = this.Y.square();
+        const ZZ = this.Z.square();
+        const ZZZZ = ZZ.square();
+        const lhs = YY.sub( XX ).mul( ZZ );
+        const rhs = ZZZZ.add( FieldElem51.EDWARDS_D.mul( XX.mul( YY ) ) );
+
+        return lhs.ct_eq( rhs );
+    }
+
+    clone(): ProjectivePoint
+    {
+        return new ProjectivePoint(
+            this.X.clone(),
+            this.Y.clone(),
+            this.Z.clone()
+        );
+    }
     /*
     pub fn to_extended(&self) -> EdwardsPoint {
         EdwardsPoint {
@@ -2349,6 +2579,29 @@ export class ProjectivePoint
             ZZ2.sub( YY_minus_XX )
         );
     }
+}
+
+/*
+#[inline]
+    fn write_u64(buf: &mut [u8], n: u64) {
+        buf[..8].copy_from_slice(&n.to_le_bytes());
+    }
+fn from(x: u64) -> Scalar {
+        use byteorder::{ByteOrder, LittleEndian};
+        let mut s_bytes = [0u8; 32];
+        LittleEndian::write_u64(&mut s_bytes, x);
+        Scalar{ bytes: s_bytes }
+    }
+*/
+export function scalar_from_u64( n: bigint | number ): Uint8Array
+{
+    n = BigInt( n );
+    const s_bytes = new Uint8Array( 32 );
+    const view = new DataView( s_bytes.buffer );
+
+    view.setBigUint64( 0, n, true );
+
+    return s_bytes;
 }
 
 export function scalar_from_bytes_mod_order_wide( input: Uint8Array ): Uint8Array
@@ -3058,7 +3311,6 @@ function read_u64_into_LE(src: Uint8Array, dst: BigUint64Array, dst_len: number 
         dstView.setBigUint64(i * 8, srcView.getBigUint64(i * 8, true), true);
     }
 }
-
 
 const AFFINE_ODD_MULTIPLES_OF_BASEPOINT: NafLookupTable<AffineNielsPoint> = new NafLookupTable([
     new AffineNielsPoint(

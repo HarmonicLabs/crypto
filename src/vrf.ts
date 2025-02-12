@@ -116,24 +116,66 @@ export class VRFProof
     }
 }
 
+/*
+pub fn extend(&self) -> (Scalar, [u8; 32]) {
+    let mut h: Sha512 = Sha512::new();
+    let mut extended = [0u8; 64];
+    let mut secret_key_bytes = [0u8; 32];
+    let mut extension = [0u8; 32];
+
+    h.update(self.as_bytes());
+    extended.copy_from_slice(&h.finalize().as_slice()[..64]);
+
+    secret_key_bytes.copy_from_slice(&extended[..32]);
+    extension.copy_from_slice(&extended[32..]);
+
+    secret_key_bytes[0] &= 248;
+    secret_key_bytes[31] &= 127;
+    secret_key_bytes[31] |= 64;
+
+    (Scalar::from_bits(secret_key_bytes), extension)
+}
+*/
+function extend_secret_key( secret_key: Uint8Array ): [ scalar: Uint8Array, extension: Uint8Array ]
+{
+    const extended = sha2_512_sync( secret_key );
+    const secret_key_bytes = extended.slice(0,32);
+    const extension = extended.slice(32,64);
+
+    secret_key_bytes[0] &= 248;
+    secret_key_bytes[31] &= 127;
+    secret_key_bytes[31] |= 64;
+
+    adjust_scalar_bits( secret_key_bytes );
+    return [ secret_key_bytes, extension ];
+}
+
+function adjust_scalar_bits( bytes: Uint8Array ): void
+{
+    bytes[31] &= 0b0111_1111;
+}
+
 export function vrf_ed25519_sha512_ell2_generate_proof(
     secret_key: Uint8Array,
     public_key: Uint8Array,
     alpha_string: Uint8Array
 ): VRFProof
 {
-    const [ secret_scalar, secret_extension ] = getExtendEd25519PrivateKeyComponentsAsBytes_sync( secret_key );
+    const [ secret_scalar, secret_extension ] = extend_secret_key( secret_key );
 
     const h = vrf_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
     const compressed_h = h.compress();
+    // console.dir({ h }, { depth: Infinity });
+
     const gamma = h.scalarMul( secret_scalar );
-    const compressed_gamma = gamma.compress();
+    const compressed_gamma = gamma.clone().compress();
+
+    console.log( "secret_scalar", toHex( secret_scalar ) );
+    console.log( "compressed_h", toHex( compressed_h ) );
+    console.log( "compressed_gamma", toHex( compressed_gamma ) );
+    console.log( "gamma", gamma );
 
     const k = vrf_ed25519_sha512_ell2_nonce_generation( secret_extension, compressed_h );
-
-    console.log({
-        k: toHex( k ),
-    })
 
     const compressed_announcement_base = ED25519_BASEPOINT_POINT.scalarMul( k ).compress();
     const compressed_announcement_h = h.scalarMul( k ).compress();
@@ -141,11 +183,11 @@ export function vrf_ed25519_sha512_ell2_generate_proof(
     // Self::compute_challenge(&compressed_h, &gamma, &announcement_base, &announcement_h);
     const challenge: Uint8Array =
     vrf_ed25519_sha512_ell2_compute_challenge(
-            compressed_h,
-            compressed_gamma,
-            compressed_announcement_base,
-            compressed_announcement_h
-        );
+        compressed_h,
+        compressed_gamma,
+        compressed_announcement_base,
+        compressed_announcement_h
+    );
 
     const response = add_scalars( k, mul_scalars( challenge, secret_scalar ) );
 
@@ -312,6 +354,7 @@ function edwards_hash_from_bytes( bytes: Uint8Array ): EdwardsPoint
     const fe = FieldElem51.fromBytes( res );
 
     const M1 = FieldElem51.elligator_encode( fe );
+
     const E1_opt = M1.to_edwards( sign_bit );
 
     if( !E1_opt )

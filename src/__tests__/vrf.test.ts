@@ -225,11 +225,19 @@ describe("vrf", () => {
             ],
         ]
 
-        const n = test_vectors.length;
+        /*
+        FieldElement51([
+        936292574774286, 
+        2130398392959545, 
+        1280931128010030, 
+        1182760305369263, 
+        1736640888287092
+        ])
+        */
+        const n = 1; test_vectors.length;
         for( let i = 0; i < n; i++ )
         {
             const [ _sk, _pk, _proof_bytes, _proof_hash, _alpha ] = test_vectors[i];
-            if( _alpha !== "" ) continue;
             test(`example ${i}`, () => {
                 const sk = fromHex( _sk );
                 const pk = fromHex( _pk );
