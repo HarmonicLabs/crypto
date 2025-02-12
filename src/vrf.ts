@@ -170,10 +170,10 @@ export function vrf_ed25519_sha512_ell2_generate_proof(
     const gamma = h.scalarMul( secret_scalar );
     const compressed_gamma = gamma.clone().compress();
 
-    console.log( "secret_scalar", toHex( secret_scalar ) );
-    console.log( "compressed_h", toHex( compressed_h ) );
-    console.log( "compressed_gamma", toHex( compressed_gamma ) );
-    console.log( "gamma", gamma );
+    // console.log( "secret_scalar", toHex( secret_scalar ) );
+    // console.log( "compressed_h", toHex( compressed_h ) );
+    // console.log( "compressed_gamma", toHex( compressed_gamma ) );
+    // console.log( "gamma", gamma );
 
     const k = vrf_ed25519_sha512_ell2_nonce_generation( secret_extension, compressed_h );
 

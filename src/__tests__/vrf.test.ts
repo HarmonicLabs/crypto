@@ -234,7 +234,7 @@ describe("vrf", () => {
         1736640888287092
         ])
         */
-        const n = 1; test_vectors.length;
+        const n =  test_vectors.length;
         for( let i = 0; i < n; i++ )
         {
             const [ _sk, _pk, _proof_bytes, _proof_hash, _alpha ] = test_vectors[i];
@@ -247,10 +247,10 @@ describe("vrf", () => {
 
                 const generated_proof = vrf_ed25519_sha512_ell2_generate_proof( sk, pk, alpha );
 
-                console.log(
-                    " " + toHex( generated_proof.toBytes() ), "\n",
-                    _proof_bytes
-                );
+                // console.log(
+                //     " " + toHex( generated_proof.toBytes() ), "\n",
+                //     _proof_bytes
+                // );
     
                 expect( vrf_ed25519_sha512_ell2_verify_proof( pk, alpha, generated_proof ) ).toBe( true );
             });
