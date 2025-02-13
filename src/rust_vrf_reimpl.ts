@@ -2154,11 +2154,6 @@ export class ProjectiveNielsPoint
      * 
      * I am ASSUMING this is what is meant to happen
      * 
-     * Update: 
-     * 
-     * I HAD TO FUCKING REVERSE ENGENEER THIS SHIT
-     * 
-     * WHO THE FUCK TOUGHT MACROS WERE A GOOD IDEA IN RUST?
      */
     conditional_negate( choice: boolean ): void
     {

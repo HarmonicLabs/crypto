@@ -1,5 +1,6 @@
-import { fromHex, toHex } from "@harmoniclabs/uint8array-utils"
+import { fromHex, toHex, uint8ArrayEq } from "@harmoniclabs/uint8array-utils"
 import { vrf_ed25519_sha512_ell2_generate_proof, vrf_ed25519_sha512_ell2_verify_proof } from "../vrf";
+import { webcrypto } from "node:crypto";
 
 describe("vrf", () => {
 
@@ -225,15 +226,6 @@ describe("vrf", () => {
             ],
         ]
 
-        /*
-        FieldElement51([
-        936292574774286, 
-        2130398392959545, 
-        1280931128010030, 
-        1182760305369263, 
-        1736640888287092
-        ])
-        */
         const n =  test_vectors.length;
         for( let i = 0; i < n; i++ )
         {
@@ -247,12 +239,16 @@ describe("vrf", () => {
 
                 const generated_proof = vrf_ed25519_sha512_ell2_generate_proof( sk, pk, alpha );
 
-                // console.log(
-                //     " " + toHex( generated_proof.toBytes() ), "\n",
-                //     _proof_bytes
-                // );
-    
+                expect( generated_proof.toBytes() ).toEqual( expected_proof_bytes );
+
                 expect( vrf_ed25519_sha512_ell2_verify_proof( pk, alpha, generated_proof ) ).toBe( true );
+
+                // using sk just to get some bytes that are not pk
+                expect( vrf_ed25519_sha512_ell2_verify_proof( sk, alpha, generated_proof ) ).toBe( false );
+
+                const wrong_alpha = fromHex( "01" + _alpha.slice(alpha[0] ?? 0) );
+                expect( vrf_ed25519_sha512_ell2_verify_proof( pk, wrong_alpha, generated_proof ) ).toBe( false );
+
             });
         }
     });
