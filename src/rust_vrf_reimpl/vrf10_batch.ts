@@ -37,18 +37,31 @@ const ONE = 0x01;
 const TWO = 0x02;
 const THREE = 0x03;
 
-export interface IVrfProof10Batch {
+export interface IVrfBatchProof10 {
     gamma: EdwardsPoint;
     u_point: EdwardsPoint;
     v_point: EdwardsPoint;
     response: Uint8Array;
 }
 
-export function vrf10_bach_ed25519_sha512_ell2_generate_proof(
+export function vrf10_batch_ed25519_sha512_ell2_proof_to_hash(
+    proof: IVrfBatchProof10
+): Uint8Array & { length: 64 }
+{
+    const compressed_gamma_cofac = proof.gamma.mul_by_cofactor().compress();
+    const input = new Uint8Array( 3 + compressed_gamma_cofac.length );
+    input[0] = SUITE_TEMP;
+    input[1] = THREE;
+    input.set( compressed_gamma_cofac, 2 );
+    input[2 + compressed_gamma_cofac.length] = 0;
+
+    return sha2_512_sync( input );
+}
+export function vrf10_batch_ed25519_sha512_ell2_generate_proof(
     secret_key: Uint8Array,
     public_key: Uint8Array,
     alpha_string: Uint8Array
-): IVrfProof10Batch
+): IVrfBatchProof10
 {
     const [ secret_scalar, secret_extension ] = extend_secret_key( secret_key );
 
@@ -87,14 +100,13 @@ export function vrf10_bach_ed25519_sha512_ell2_generate_proof(
 export function vrf10_batch_ed25519_sha512_ell2_verify_proof(
     public_key: Uint8Array,
     alpha_string: Uint8Array,
-    proof: IVrfProof10Batch
+    proof: IVrfBatchProof10
 ): boolean
 {
     const h = vrf10_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
     const compressed_h = h.compress();
 
     const decompressed_pk = decompressCompressedEdwardsY( public_key );// pointFromBytes( public_key );
-
     if( !decompressed_pk || decompressed_pk.is_small_order() ) return false;
 
     const gamma = proof.gamma;
@@ -103,7 +115,7 @@ export function vrf10_batch_ed25519_sha512_ell2_verify_proof(
     const compressed_announcement_h = proof.v_point.compress();
 
     // Scalar
-    const challenge: Uint8Array =
+    const proof_challenge: Uint8Array =
     vrf10_ed25519_sha512_ell2_compute_challenge(
         compressed_h,
         compressed_gamma,
@@ -112,7 +124,7 @@ export function vrf10_batch_ed25519_sha512_ell2_verify_proof(
     );
 
     const U = EdwardsPoint.vartime_double_scalar_mul_basepoint(
-        negate_scalar( challenge ),
+        negate_scalar( proof_challenge ),
         decompressed_pk,
         proof.response
     );
@@ -123,20 +135,20 @@ export function vrf10_batch_ed25519_sha512_ell2_verify_proof(
         );
     */
    const V = EdwardsPoint.vartime_multiscalar_mul(
-        [ proof.response, negate_scalar( challenge ) ],
+        [ proof.response, negate_scalar( proof_challenge ) ],
         [ h, gamma ]
     );
 
-    const computed_challenge = vrf10_ed25519_sha512_ell2_compute_challenge(
-        compressed_h,
-        proof.gamma.compress(),
-        U.compress(),
-        V.compress()
-    );
+    // const computed_challenge = vrf10_ed25519_sha512_ell2_compute_challenge(
+    //     compressed_h,
+    //     proof.gamma.compress(),
+    //     U.compress(),
+    //     V.compress()
+    // );
 
     return (
-        U.equals( proof.u_point ) &&
-        V.equals( proof.v_point )
+        uint8ArrayEq( U.compress(), compressed_announcement_base ) &&
+        uint8ArrayEq( V.compress(), compressed_announcement_h )
     );
 }
 
@@ -157,7 +169,7 @@ export function vrf10_batch_ed25519_sha512_ell2_verify_proof(
         output
     }
 */
-function vrf10_proof_to_hash( proof: IVrfProof10Batch ): Uint8Array & { length: 64 }
+function vrf10_proof_to_hash( proof: IVrfBatchProof10 ): Uint8Array & { length: 64 }
 {
     const compressed_gamma_cofac = proof.gamma.mul_by_cofactor().compress();
     const hashInput = new Uint8Array( 3 + compressed_gamma_cofac.length );
@@ -170,7 +182,7 @@ function vrf10_proof_to_hash( proof: IVrfProof10Batch ): Uint8Array & { length: 
 }
 
 /*
-function vrfProofToBytesProof( proof: IVrfProof10Batch )
+function vrfProofToBytesProof( proof: IVrfBatchProof10 )
 {
     return {
         gamma: bigpointToUint8Array( proof.gamma ),
@@ -258,7 +270,7 @@ function scalar_from_bits_inplace( bytes: Uint8Array ): void
  * ///   bases `generator` and `H` respectively.
  *
  * /
-function vrf_ed25519_sha512_ell2_prove(sk: Uint8Array, alpha: Uint8Array): IVrfProof10Batch
+function vrf_ed25519_sha512_ell2_prove(sk: Uint8Array, alpha: Uint8Array): IVrfBatchProof10
 {
     /// - Extend the secret key, into a `secret_scalar` and the `secret_extension`
     const [ scalar, extension ] = getExtendEd25519PrivateKeyComponents_sync( sk );

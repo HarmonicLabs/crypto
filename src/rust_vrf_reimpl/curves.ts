@@ -1418,22 +1418,177 @@ fn optional_multiscalar_mul<I, J>(scalars: I, points: J) -> Option<EdwardsPoint>
                 .fold(hi_column, |total, p| total.mul_by_pow_2(w as u32) + p),
         )
     }
+}
 */
 function pippenger_optional_multiscalar_mul(
     scalars: Uint8Array[],
     points: EdwardsPoint[]
 ): EdwardsPoint
 {
-    throw new Error( "Not implemented" );
     const size = scalars.length;
 
-    let w = 6;
-    if( w < 500 ) {}
-    else if( w < 800 ) { w = 7; }
-    else { w = 8; }
+    const w = size < 500 ? 6 : size < 800 ? 7 : 8;
 
     const max_digit = 1 << w;
-    // const digits_count = scalar_to_radix_2w_size_hint( w );
+    const digits_count = scalar_to_radix_2w_size_hint( w );
+    const buckets_count = (max_digit / 2) >>> 0;
+
+    const scalras_digits = scalars.map( s => scalar_to_radix_2w( s, w ) );
+
+    const points_proj = points.map( p => p.toProjectiveNiels() );
+
+    // zipped
+    const scalars_points: [Int8Array<ArrayBufferLike> & { length: 64 }, ProjectiveNielsPoint][] =
+        scalras_digits.map( ( s, i ) => [ s, points_proj[ i ] ] );
+
+    // all elems will be replaced in `columns` loop, just a temp value
+    const buckets: EdwardsPoint[] = new Array( buckets_count ).fill( EdwardsPoint.IDENTITY );
+
+    const columns = new Array( buckets_count ).fill( 0 ).map( () => EdwardsPoint.IDENTITY );
+    for( let i = digits_count - 1; i >= 0; i-- )
+    {
+        for( let j = 0; j < buckets_count; j++ )
+            buckets[ j ] = EdwardsPoint.IDENTITY;
+
+        for( let j = 0; j < scalars_points.length; j++ )
+        {
+            const [ digits, pt ] = scalars_points[ j ];
+
+            const digit = digits[ i ];
+
+            if( digit > 0 )
+            {
+                const b = digit - 1;
+                buckets[b] = buckets[b].addProjectiveNiels( pt ).toExtended();
+            }
+            else if( digit < 0 )
+            {
+                const b = -digit - 1;
+                buckets[b] = buckets[b].subProjectiveNiels( pt ).toExtended();
+            }
+        }
+
+        let buckets_intermediate_sum = buckets[ buckets_count - 1 ];
+        let buckets_sum = buckets[ buckets_count - 1 ];
+        for( let j = buckets_count - 2; j >= 0; j-- )
+        {
+            buckets_intermediate_sum = buckets_intermediate_sum.add( buckets[ j ] );
+            buckets_sum = buckets_sum.add( buckets_intermediate_sum );
+        }
+
+        columns[ i ] = buckets_sum;
+    }
+
+    // const hi_column = columns[ columns.length - 1 ];
+
+    return columns.reduce( ( total, p ) => total.mulByPow2( w ).add( p ) );
+}
+
+function scalar_to_radix_2w_size_hint( w: number ): number
+{
+    return (((256 + w - 1)/w) >>> 0) + (w >= 8 ?  1 : 0);
+}
+
+/*
+pub(crate) fn to_radix_2w(&self, w: usize) -> [i8; 64] {
+        debug_assert!(w >= 4);
+        debug_assert!(w <= 8);
+
+        if w == 4 {
+            return self.to_radix_16();
+        }
+
+        use byteorder::{ByteOrder, LittleEndian};
+
+        // Scalar formatted as four `u64`s with carry bit packed into the highest bit.
+        let mut scalar64x4 = [0u64; 4];
+        LittleEndian::read_u64_into(&self.bytes, &mut scalar64x4[0..4]);
+
+        let radix: u64 = 1 << w;
+        let window_mask: u64 = radix - 1;
+
+        let mut carry = 0u64;
+        let mut digits = [0i8; 64];
+        let digits_count = (256 + w - 1)/w as usize;
+        for i in 0..digits_count {
+            // Construct a buffer of bits of the scalar, starting at `bit_offset`.
+            let bit_offset = i*w;
+            let u64_idx = bit_offset / 64;
+            let bit_idx = bit_offset % 64;
+
+            // Read the bits from the scalar
+            let bit_buf: u64;
+            if bit_idx < 64 - w  || u64_idx == 3 {
+                // This window's bits are contained in a single u64,
+                // or it's the last u64 anyway.
+                bit_buf = scalar64x4[u64_idx] >> bit_idx;
+            } else {
+                // Combine the current u64's bits with the bits from the next u64
+                bit_buf = (scalar64x4[u64_idx] >> bit_idx) | (scalar64x4[1+u64_idx] << (64 - bit_idx));
+            }
+
+            // Read the actual coefficient value from the window
+            let coef = carry + (bit_buf & window_mask); // coef = [0, 2^r)
+
+             // Recenter coefficients from [0,2^w) to [-2^w/2, 2^w/2)
+            carry = (coef + (radix/2) as u64) >> w;
+            digits[i] = ((coef as i64) - (carry << w) as i64) as i8;
+        }
+
+        // When w < 8, we can fold the final carry onto the last digit d,
+        // because d < 2^w/2 so d + carry*2^w = d + 1*2^w < 2^(w+1) < 2^8.
+        //
+        // When w = 8, we can't fit carry*2^w into an i8.  This should
+        // not happen anyways, because the final carry will be 0 for
+        // reduced scalars, but the Scalar invariant allows 255-bit scalars.
+        // To handle this, we expand the size_hint by 1 when w=8,
+        // and accumulate the final carry onto another digit.
+        match w {
+            8 => digits[digits_count] += carry as i8,
+            _ => digits[digits_count-1] += (carry << w) as i8,
+        }
+
+        digits
+    }
+*/
+function scalar_to_radix_2w( scalar: Uint8Array, w: number ): Int8Array & { length: 64 }
+{
+    if( w === 4 ) return scalar_to_radix_16( scalar );
+
+    const scalar64x4 = new BigUint64Array( 4 );
+    read_u64_into_LE( scalar, scalar64x4 );
+
+    const radix = BigInt(1 << w);
+    const window_mask = radix - _1n;
+
+    let carry = _0n;
+    const digits = new Int8Array( 64 ) as (Int8Array & { length: 64 });
+    const u8digits = new Uint8Array( digits.buffer );
+    const digits_count = (((256 + w - 1)/w) >>> 0);
+    for( let i = 0; i < digits_count; i++ )
+    {
+        const bit_offset = i * w;
+        const u64_idx = (bit_offset / 64) >>> 0;
+        const bit_idx = BigInt( bit_offset % 64 );
+
+        let bit_buf: bigint;
+        if( bit_idx < 64 - w || u64_idx === 3 )
+            bit_buf = scalar64x4[ u64_idx ] >> bit_idx;
+        else
+            bit_buf = (scalar64x4[ u64_idx ] >> bit_idx) | ((scalar64x4[ 1 + u64_idx ] << (_64n - bit_idx)) & LOW_64_BIT_MASK);
+
+        const coef = (carry + (bit_buf & window_mask) & LOW_64_BIT_MASK);
+
+        carry = ((coef + (radix >> _1n)) / radix) & LOW_64_BIT_MASK;
+        u8digits[ i ] = Number((coef - (carry * radix))) & 0xff;
+    }
+    
+    if( w === 8 )
+        u8digits[digits_count] =  (u8digits[digits_count] + Number( carry )) & 0xff ;
+    else
+        u8digits[digits_count-1] = (u8digits[digits_count-1] + (Number( carry ) << w)) & 0xff ;
+
+    return digits;
 }
 
 export class EdwardsPoint
@@ -1444,6 +1599,34 @@ export class EdwardsPoint
         readonly Z: FieldElem51,
         readonly T: FieldElem51
     ) {}
+
+    /*
+    /// Compute \\([2\^k] P \\) by successive doublings. Requires \\( k > 0 \\).
+    pub(crate) fn mul_by_pow_2(&self, k: u32) -> EdwardsPoint {
+        debug_assert!( k > 0 );
+        let mut r: CompletedPoint;
+        let mut s = self.to_projective();
+        for _ in 0..(k-1) {
+            r = s.double(); s = r.to_projective();
+        }
+        // Unroll last iteration so we can go directly to_extended()
+        s.double().to_extended()
+    }
+    */
+    mulByPow2( k: number ): EdwardsPoint
+    {
+        if( k <= 0 ) throw new Error( "k must be > 0" );
+
+        let r: CompletedPoint;
+        let s = this.toProjective();
+        for( let i = 0; i < k - 1; i++ )
+        {
+            r = s.double();
+            s = r.toProjective();
+        }
+
+        return s.double().toExtended();
+    }
 
     equals( other: EdwardsPoint ): boolean
     {
@@ -1545,8 +1728,11 @@ export class EdwardsPoint
     static vartime_multiscalar_mul( scalars: Uint8Array[], points: EdwardsPoint[] ): EdwardsPoint // | undefined
     {
         return straus_optional_multiscalar_mul( scalars, points );
+        
+        // pippenger is giving problems
+
         // if( scalars.length < 190 )
-        //    return straus_optional_multiscalar_mul( scalars, points );
+        //     return straus_optional_multiscalar_mul( scalars, points );
         // else
         //     return pippenger_optional_multiscalar_mul( scalars, points );
     }
@@ -2380,9 +2566,9 @@ pub(crate) fn to_radix_16(&self) -> [i8; 64] {
     output
 }
 */
-function scalar_to_radix_16( scalar: Uint8Array ): Int8Array
+function scalar_to_radix_16( scalar: Uint8Array ): Int8Array & { length: 64 }
 {
-    const output = new Int8Array( 64 );
+    const output = new Int8Array( 64 ) as (Int8Array & { length: 64 });
     const u8 = new Uint8Array( output.buffer );
 
     for( let i = 0; i < 32; i++ )
@@ -3327,9 +3513,9 @@ function scalar_non_adjacent_form( scalar: Uint8Array, w: number ): Int8Array
     return naf;
 }
 
-function read_u64_into_LE(src: Uint8Array, dst: BigUint64Array, dst_len: number = Math.min( dst.length * 8, src.length ) ): void
+function read_u64_into_LE(src: Uint8Array, dst: BigUint64Array, dst_len: number = (Math.min( dst.length * 8, src.length ) / 8) >>> 0 ): void
 {
-    if (src.length  >= dst.length * 8) {
+    if (src.length > dst.length * 8) {
         throw new Error("Source and destination size mismatch");
     }
 

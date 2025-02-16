@@ -166,18 +166,17 @@ export function vrf10_ed25519_sha512_ell2_verify_proof(
     const compressed_h = h.compress();
 
     const decompressed_pk = decompressCompressedEdwardsY( public_key );// pointFromBytes( public_key );
-
     if( !decompressed_pk || decompressed_pk.is_small_order() ) return false;
 
     // Scalar
     const proof_challenge = proof.challenge;
+    const gamma = proof.gamma;
 
     const U = EdwardsPoint.vartime_double_scalar_mul_basepoint(
         negate_scalar( proof_challenge ),
         decompressed_pk,
         proof.response
     );
-    const gamma = proof.gamma;
     /*
     let V = EdwardsPoint::vartime_multiscalar_mul(
             iter::once(self.response).chain(iter::once(self.challenge.neg())),
