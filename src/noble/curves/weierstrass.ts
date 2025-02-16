@@ -5,7 +5,7 @@ original source: https://github.com/paulmillr/noble-curves/blob/38a4ca1e6b0a80c6
 
 it was modified and adapted to this repository
 
-the main reason for copying over and not using as dependency is because of different target in the `tsconfig.json`
+the main reason for copying over and not using as dependency is because of different target in the `tsconfigon`
 
 `@noble/hashes` targets es2020, which tends to cause problems with some other (older) packages sometimes
 
@@ -14,10 +14,11 @@ this repo targets ES5+
 
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 // Short Weierstrass curve. The formula is: y² = x³ + ax + b
-import * as mod from './modular';
-import * as ut from './utils';
-import { CHash, Hex, PrivKey, ensureBytes } from './utils';
-import { Group, GroupConstructor, wNAF, BasicCurve, validateBasic, AffinePoint } from './curve';
+import * as mod from '../abstract/modular';
+import * as ut from '../abstract/utils';
+import { CHash, Hex, PrivKey, ensureBytes } from '../abstract/utils';
+import { Group, GroupConstructor, BasicCurve, validateBasic, AffinePoint } from '../abstract/curve';
+import { wNAF } from './curve';
 
 export type { AffinePoint };
 type HmacFnSync = (key: Uint8Array, ...messages: Uint8Array[]) => Uint8Array;
@@ -546,7 +547,7 @@ export function weierstrassPoints<T>(opts: CurvePointsType<T>): CurvePointsRes<T
      */
     multiply(scalar: bigint): Point {
       assertGE(scalar);
-      let n = scalar;
+      let n = BigInt(scalar);
       let point: Point, fake: Point; // Fake point is used to const-time mult
       const { endo } = CURVE;
       if (endo) {

@@ -63,7 +63,7 @@ import {
   ProjConstructor,
   mapToCurveSimpleSWU,
   AffinePoint,
-} from './abstract/weierstrass';
+} from './curves/weierstrass';
 import { isogenyMap } from './abstract/hash-to-curve';
 import { sha256 } from "./sha256"
 import { randomBytes } from './utils';

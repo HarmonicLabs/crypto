@@ -1,6 +1,6 @@
 import { fromHex, toHex, uint8ArrayEq } from "@harmoniclabs/uint8array-utils"
-import { vrf_ed25519_sha512_ell2_generate_proof, vrf_ed25519_sha512_ell2_verify_proof } from "../vrf";
-import { webcrypto } from "node:crypto";
+import { vrf_ed25519_sha512_ell2_generate_proof, vrf_ed25519_sha512_ell2_verify_proof } from "../rust_vrf_reimpl/vrf03";
+import { VrfProof03 } from "../vrf";
 
 describe("vrf", () => {
 
@@ -237,11 +237,16 @@ describe("vrf", () => {
                 const expected_proof_hash  = fromHex( _proof_hash  );
                 const alpha = fromHex( _alpha );
 
-                const generated_proof = vrf_ed25519_sha512_ell2_generate_proof( sk, pk, alpha );
+                const generated_proof = VrfProof03.generate( sk, pk, alpha );
 
                 expect( generated_proof.toBytes() ).toEqual( expected_proof_bytes );
 
+                const expected_proof = VrfProof03.fromBytes( expected_proof_bytes );
+
+                expect( generated_proof.toHash() ).toEqual( expected_proof_hash );
+
                 expect( vrf_ed25519_sha512_ell2_verify_proof( pk, alpha, generated_proof ) ).toBe( true );
+                expect( vrf_ed25519_sha512_ell2_verify_proof( pk, alpha, expected_proof ) ).toBe( true );
 
                 // using sk just to get some bytes that are not pk
                 expect( vrf_ed25519_sha512_ell2_verify_proof( sk, alpha, generated_proof ) ).toBe( false );
@@ -252,111 +257,5 @@ describe("vrf", () => {
             });
         }
     });
-
-    // ECVRF-EDWARDS25519-SHA512-ELL2
-    // https://datatracker.ietf.org/doc/html/rfc9381#name-ecvrf-edwards25519-sha512-e
-
-    test.skip("example 19", () => {
-        /*
-        Example 19:
-
-        SK = 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60
-        PK = d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
-        alpha =  (the empty string)
-        x = 307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f
-        In Elligator2: uniform_bytes = d620782a206d9de584b74e23ae5ee1db5ca5298b3fc527c4867f049dee6dd419b3674967bd614890f621c128d72269ae
-        In Elligator2: u = 30f037b9745a57a9a2b8a68da81f397c39d46dee9d047f86c427c53f8b29a55c
-        In Elligator2: gx1 = 8cb66318fb2cea01672d6c27a5ab662ae33220961607f69276080a56477b4a08
-        In Elligator2: gx1 is a square
-        H = b8066ebbb706c72b64390324e4a3276f129569eab100c26b9f05011200c1bad9
-        k_string = b5682049fee54fe2d519c9afff73bbfad724e69a82d5051496a42458f817bed7a386f96b1a78e5736756192aeb1818a20efb336a205ffede351cfe88dab8d41c
-        k = 55cbb247af9b8372259a97b2cfec656d78868deb33b203d51b9961c364522400
-        U = k*B = 762f5c178b68f0cddcc1157918edf45ec334ac8e8286601a3256c3bbf858edd9
-        V = k*H = 4652eba1c4612e6fce762977a59420b451e12964adbe4fbecd58a7aeff5860af
-        pi = 7d9c633ffeee27349264cf5c667579fc583b4bda63ab71d001f89c10003ab46f14adf9a3cd8b8412d9038531e865c341cafa73589b023d14311c331a9ad15ff2fb37831e00f0acaa6d73bc9997b06501
-        beta = 9d574bf9b8302ec0fc1e21c3ec5368269527b87b462ce36dab2d14ccf80c53cccf6758f058c5b1c856b116388152bbe509ee3b9ecfe63d93c3b4346c1fbc6c54
-
-        */
-
-        const expected = Object.freeze({
-            SK: fromHex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"),
-            PK: fromHex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"),
-            alpha: fromHex(""),
-            x: fromHex("307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f"),
-            uniform_bytes: fromHex("d620782a206d9de584b74e23ae5ee1db5ca5298b3fc527c4867f049dee6dd419b3674967bd614890f621c128d72269ae"),
-            u: fromHex("30f037b9745a57a9a2b8a68da81f397c39d46dee9d047f86c427c53f8b29a55c"),
-            gx1: fromHex("8cb66318fb2cea01672d6c27a5ab662ae33220961607f69276080a56477b4a08"),
-            H: fromHex("b8066ebbb706c72b64390324e4a3276f129569eab100c26b9f05011200c1bad9"),
-            k_string: fromHex("b5682049fee54fe2d519c9afff73bbfad724e69a82d5051496a42458f817bed7a386f96b1a78e5736756192aeb1818a20efb336a205ffede351cfe88dab8d41c"),
-            k: fromHex("55cbb247af9b8372259a97b2cfec656d78868deb33b203d51b9961c364522400"),
-            U: fromHex("762f5c178b68f0cddcc1157918edf45ec334ac8e8286601a3256c3bbf858edd9"),
-            V: fromHex("4652eba1c4612e6fce762977a59420b451e12964adbe4fbecd58a7aeff5860af"),
-            pi: fromHex("7d9c633ffeee27349264cf5c667579fc583b4bda63ab71d001f89c10003ab46f14adf9a3cd8b8412d9038531e865c341cafa73589b023d14311c331a9ad15ff2fb37831e00f0acaa6d73bc9997b06501"),
-            beta: fromHex("9d574bf9b8302ec0fc1e21c3ec5368269527b87b462ce36dab2d14ccf80c53cccf6758f058c5b1c856b116388152bbe509ee3b9ecfe63d93c3b4346c1fbc6c54")
-        });
-
-        const result = vrf_ed25519_sha512_ell2_generate_proof(expected.SK, expected.PK, expected.alpha);
-
-        // console.log( result );
-    });
-
-    test.skip("example 20", () => {
-        /*
-        Example 19:
-
-        SK = 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60
-        PK = d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
-        alpha = (the empty string)
-        x = 307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f
-        In Elligator: r =
-        9ddd071cd5837e591a3a40c57a46701bb7f49b1b53c670d490c2766a08fa6e3d
-        In Elligator: w =
-        c7b5d6239e52a473a2b57a92825e0e5de4656e349bb198de5afd6a76e5a07066
-        In Elligator: e = -1
-        H = 1c5672d919cc0a800970cd7e05cb36ed27ed354c33519948e5a9eaf89aee12b7
-        k = 868b56b8b3faf5fc7e276ff0a65aaa896aa927294d768d0966277d94599b7afe4
-        a6330770da5fdc2875121e0cbecbffbd4ea5e491eb35be53fa7511d9f5a61f2
-        U = k*B =
-        c4743a22340131a2323174bfc397a6585cbe0cc521bfad09f34b11dd4bcf5936
-        V = k*H =
-        e309cf5272f0af2f54d9dc4a6bad6998a9d097264e17ae6fce2b25dcbdd10e8b
-        pi = b6b4699f87d56126c9117a7da55bd0085246f4c56dbc95d20172612e9d38e8d7
-        ca65e573a126ed88d4e30a46f80a666854d675cf3ba81de0de043c3774f061560f55e
-        dc256a787afe701677c0f602900
-        beta = 5b49b554d05c0cd5a5325376b3387de59d924fd1e13ded44648ab33c21349a
-        603f25b84ec5ed887995b33da5e3bfcb87cd2f64521c4c62cf825cffabbe5d31cc
-
-        */
-
-        const expected = Object.freeze({
-            SK: fromHex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"),
-            PK: fromHex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"),
-            alpha: fromHex(""),
-            x: fromHex("307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f"),
-            uniform_bytes: fromHex("d620782a206d9de584b74e23ae5ee1db5ca5298b3fc527c4867f049dee6dd419b3674967bd614890f621c128d72269ae"),
-            u: fromHex("30f037b9745a57a9a2b8a68da81f397c39d46dee9d047f86c427c53f8b29a55c"),
-            gx1: fromHex("8cb66318fb2cea01672d6c27a5ab662ae33220961607f69276080a56477b4a08"),
-            H: fromHex("b8066ebbb706c72b64390324e4a3276f129569eab100c26b9f05011200c1bad9"),
-            k_string: fromHex("b5682049fee54fe2d519c9afff73bbfad724e69a82d5051496a42458f817bed7a386f96b1a78e5736756192aeb1818a20efb336a205ffede351cfe88dab8d41c"),
-            k: fromHex("55cbb247af9b8372259a97b2cfec656d78868deb33b203d51b9961c364522400"),
-            U: fromHex("762f5c178b68f0cddcc1157918edf45ec334ac8e8286601a3256c3bbf858edd9"),
-            V: fromHex("4652eba1c4612e6fce762977a59420b451e12964adbe4fbecd58a7aeff5860af"),
-            pi: fromHex("7d9c633ffeee27349264cf5c667579fc583b4bda63ab71d001f89c10003ab46f14adf9a3cd8b8412d9038531e865c341cafa73589b023d14311c331a9ad15ff2fb37831e00f0acaa6d73bc9997b06501"),
-            beta: fromHex("9d574bf9b8302ec0fc1e21c3ec5368269527b87b462ce36dab2d14ccf80c53cccf6758f058c5b1c856b116388152bbe509ee3b9ecfe63d93c3b4346c1fbc6c54")
-        });
-
-        // const result = vrf_ed25519_sha512_ell2_prove(expected.SK, expected.alpha);
-        // const bytesProof = vrfProofToBytesProof(result);
-        // const hexProof = {
-        //     gamma: toHex( bytesProof.gamma ),
-        //     challange: toHex( bytesProof.challange ),
-        //     response: toHex( bytesProof.response ),
-        // };
-// 
-        // // console.log( hexProof );
-        const result = vrf_ed25519_sha512_ell2_generate_proof(expected.SK, expected.PK, expected.alpha);
-
-        // console.log( result );
-    })
 
 })

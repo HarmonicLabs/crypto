@@ -1,5 +1,5 @@
 import { fromHex, toHex } from "@harmoniclabs/uint8array-utils";
-import { EdwardsPoint, FieldElem51 } from "../../rust_vrf_reimpl"
+import { EdwardsPoint, FieldElem51 } from "../../rust_vrf_reimpl/curves"
 
 describe("scalarMul", () => {
 

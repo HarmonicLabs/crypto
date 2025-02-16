@@ -2,7 +2,7 @@
 import { sha256 } from './sha256';
 import { randomBytes } from './utils';
 import { Field, mod, pow2 } from './abstract/modular';
-import { ProjPointType as PointType, VerOpts, mapToCurveSimpleSWU } from './abstract/weierstrass';
+import { ProjPointType as PointType, VerOpts, mapToCurveSimpleSWU } from './curves/weierstrass';
 import type { Hex, PrivKey } from './abstract/utils';
 import { bytesToNumberBE, concatBytes, ensureBytes, numberToBytesBE } from './abstract/utils';
 import { createHasher, isogenyMap } from './abstract/hash-to-curve';

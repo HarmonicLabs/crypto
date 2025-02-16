@@ -38,7 +38,7 @@ import {
   ProjPointType as ProjPointType,
   CurvePointsRes,
   weierstrassPoints,
-} from './weierstrass';
+} from '../curves/weierstrass';
 
 type Fp = bigint; // Can be different field?
 

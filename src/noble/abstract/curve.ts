@@ -149,6 +149,7 @@ export function wNAF<T extends Group<T>>(c: GroupConstructor<T>, bits: number): 
      * @returns real and fake (for const-time) points
      */
     wNAF(W: number, precomputes: T[], n: bigint): { p: T; f: T } {
+      n = BigInt(n);
       // TODO: maybe check that scalar is less than group order? wNAF behavious is undefined otherwise
       // But need to carefully remove other checks before wNAF. ORDER == bits here
       const { windows, windowSize } = calcWOpts(W, bits);

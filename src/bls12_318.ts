@@ -1,7 +1,7 @@
 import { Fp, Fp12, Fp12Multiply, Fp12_ONE, Fp12_conjugate, Fp12_eql, Fp12_finalExponentiate, Fp2, G1_mapToCurve, G2_mapToCurve, bls12_381, parseMask } from "./noble";
 import { H2CPointConstructor, createHasher } from "./noble/abstract/hash-to-curve";
 import { bitGet, bitLen } from "./noble/abstract/utils";
-import { AffinePoint, ProjConstructor } from "./noble/abstract/weierstrass";
+import { AffinePoint, ProjConstructor } from "./noble/curves/weierstrass";
 import { sha256 } from "./noble/sha256";
 
 export const BlsG1 = bls12_381.G1.ProjectivePoint;

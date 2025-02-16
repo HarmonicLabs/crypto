@@ -1,5 +1,4 @@
-import { toHex } from "@harmoniclabs/uint8array-utils";
-import { EdwardsPoint, FieldElem51, LookupTableProjectiveNielsPoint, ProjectiveNielsPoint  } from "../rust_vrf_reimpl"
+import { EdwardsPoint, FieldElem51, LookupTableProjectiveNielsPoint, ProjectiveNielsPoint  } from "../rust_vrf_reimpl/curves"
 
 describe("negate", () => {
 

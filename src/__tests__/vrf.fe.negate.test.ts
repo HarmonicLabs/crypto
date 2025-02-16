@@ -1,5 +1,4 @@
-import { toHex } from "@harmoniclabs/uint8array-utils";
-import { FieldElem51 } from "../rust_vrf_reimpl"
+import { FieldElem51 } from "../rust_vrf_reimpl/curves"
 
 describe("negate", () => {
 

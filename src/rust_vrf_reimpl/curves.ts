@@ -1,18 +1,26 @@
-import { toHex, uint8ArrayEq } from "@harmoniclabs/uint8array-utils";
+import { uint8ArrayEq } from "@harmoniclabs/uint8array-utils";
 
 function load8(bytes: DataView | Uint8Array, offset: number): bigint {
     const dataView = bytes instanceof DataView ? bytes : new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     return dataView.getBigUint64(offset, true);
 }
 
-const low51Mask = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
+const _0n = BigInt( 0 );
+const _1n = BigInt( 1 );
+const _51n = BigInt( 51 );
+const _52n = BigInt( 52 );
+const _64n = BigInt( 64 );
+
+const LOW_51_BIT_MASK = ( _1n << _51n ) - _1n;
+const LOW_52_BIT_MASK = ( _1n << _52n ) - _1n;
+const LOW_64_BIT_MASK = ( _1n << _64n ) - _1n;
 
 function innerConditionalAssign( self: bigint, other: bigint, choice: boolean ): bigint
 {
     // if choice = 0, mask = (-0) = 0000...0000
     // if choice = 1, mask = (-1) = 1111...1111
-    // return self ^ ( choice ? ( self ^ other ) : BigInt( 0 ) );
-    // const mask = choice ? (BigInt(1) << BigInt(64)) - BigInt(1) : BigInt( 0 );
+    // return self ^ ( choice ? ( self ^ other ) : _0n );
+    // const mask = choice ? (_1n << _64n) - _1n : _0n;
     // return self ^ ( mask & ( self ^ other ) );
 
     return choice ? other : self;
@@ -28,11 +36,11 @@ export class FieldElem51
     {
         return new FieldElem51(
             new BigUint64Array([
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 )
+                _0n,
+                _0n,
+                _0n,
+                _0n,
+                _0n
             ])
         );
     }
@@ -41,11 +49,11 @@ export class FieldElem51
     {
         return new FieldElem51(
             new BigUint64Array([
-                BigInt( 1 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
+                _1n,
+                _0n,
+                _0n,
+                _0n,
+                _0n,
             ])
         );
     }
@@ -100,11 +108,11 @@ export class FieldElem51
         const dataView = new DataView( bytes.buffer, bytes.byteOffset, bytes.byteLength );
         return new FieldElem51(
             new BigUint64Array([
-                  load8( dataView, 0 )                     & low51Mask,
-                ( load8( dataView, 6  ) >> BigInt( 3  ) )  & low51Mask,
-                ( load8( dataView, 12 ) >> BigInt( 6  ) )  & low51Mask,
-                ( load8( dataView, 19 ) >> BigInt( 1  ) )  & low51Mask,
-                ( load8( dataView, 24 ) >> BigInt( 12 ) )  & low51Mask,
+                  load8( dataView, 0 )                     & LOW_51_BIT_MASK,
+                ( load8( dataView, 6  ) >> BigInt( 3  ) )  & LOW_51_BIT_MASK,
+                ( load8( dataView, 12 ) >> BigInt( 6  ) )  & LOW_51_BIT_MASK,
+                ( load8( dataView, 19 ) >> BigInt( 1  ) )  & LOW_51_BIT_MASK,
+                ( load8( dataView, 24 ) >> BigInt( 12 ) )  & LOW_51_BIT_MASK,
             ])
         );
     }
@@ -160,6 +168,33 @@ export class FieldElem51
         return new MontgomeryPoint( u.toBytes() );
     }
 
+    static elligator_encode_var_time( r_0: FieldElem51 ): MontgomeryPoint
+    {
+        const one = FieldElem51.one();
+        const d_1 = one.add( r_0.square2() );
+    
+        // const d = d_1.invert().mul( FieldElem51.fromBytes( new Uint8Array( 32 ) ) );
+        const d = FieldElem51.MONTGOMERY_A_NEG.mul( d_1.invert() );
+    
+        const MONTGOMERY_A = FieldElem51.MONTGOMERY_A;
+        const d_sq = d.square();
+        const au = MONTGOMERY_A.mul( d );
+    
+        const inner = d_sq.add( au ).add( one );
+        const eps = d.mul( inner );
+    
+        const [ eps_is_sq, _eps ] = FieldElem51.sqrt_ratio_i( eps, one );
+    
+        const zero = FieldElem51.zero();
+        // let Atemp = FieldElement::conditional_select(&MONTGOMERY_A, &zero, eps_is_sq); /* 0, or A if nonsquare*/
+        const Atemp = FieldElem51.conditional_select( MONTGOMERY_A, zero, eps_is_sq );
+        let u = d.add( Atemp );
+
+        u.conditional_negate( !eps_is_sq );
+    
+        return new MontgomeryPoint( u.toBytes() );
+    }
+
     /*
     fn conditional_select(
         a: &FieldElement51,
@@ -189,7 +224,7 @@ export class FieldElem51
         choice: boolean
     ): FieldElem51
     {
-        const mask = choice ? (BigInt(1) << BigInt(64)) - BigInt(1) : BigInt( 0 );
+        const mask = choice ? LOW_64_BIT_MASK : _0n;
         const a_bytes = a.bytes;
         const b_bytes = b.bytes;
         return new FieldElem51(
@@ -221,10 +256,10 @@ export class FieldElem51
         return new FieldElem51(
             new BigUint64Array([
                 BigInt( "486662" ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
-                BigInt( 0 ),
+                _0n,
+                _0n,
+                _0n,
+                _0n,
             ])
         )
     }
@@ -352,26 +387,24 @@ export class FieldElem51
             let c3: bigint = ( a[ 4 ] * a4_19  ) + BigInt( 2 ) * ( ( a[ 0 ] * a[ 3 ] ) + ( a[ 1 ] * a[ 2 ] ) );
             let c4: bigint = ( a[ 2 ] * a[ 2 ] ) + BigInt( 2 ) * ( ( a[ 0 ] * a[ 4 ] ) + ( a[ 1 ] * a[ 3 ] ) );
 
-            const LOW_51_BIT_MASK: bigint = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
-
-            c1 += ( c0 >> BigInt( 51 ) );
+            c1 += ( c0 >> _51n );
             a[ 0 ] = c0 & LOW_51_BIT_MASK;
 
-            c2 += ( c1 >> BigInt( 51 ) );
+            c2 += ( c1 >> _51n );
             a[ 1 ] = c1 & LOW_51_BIT_MASK;
 
-            c3 += ( c2 >> BigInt( 51 ) );
+            c3 += ( c2 >> _51n );
             a[ 2 ] = c2 & LOW_51_BIT_MASK;
 
-            c4 += ( c3 >> BigInt( 51 ) );
+            c4 += ( c3 >> _51n );
             a[ 3 ] = c3 & LOW_51_BIT_MASK;
 
-            let carry: bigint = ( c4 >> BigInt( 51 ) );
+            let carry: bigint = ( c4 >> _51n );
             a[ 4 ] = c4 & LOW_51_BIT_MASK;
 
             a[ 0 ] = a[ 0 ] + carry * BigInt( 19 );
 
-            a[ 1 ] += a[ 0 ] >> BigInt( 51 );
+            a[ 1 ] += a[ 0 ] >> _51n;
             a[ 0 ] &= LOW_51_BIT_MASK;
 
             k = k - 1;
@@ -456,13 +489,11 @@ export class FieldElem51
     */
     static reduce( limbs: BigUint64Array ): FieldElem51
     {
-        const LOW_51_BIT_MASK: bigint = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
-
-        let c0 = limbs[ 0 ] >> BigInt( 51 );
-        let c1 = limbs[ 1 ] >> BigInt( 51 );
-        let c2 = limbs[ 2 ] >> BigInt( 51 );
-        let c3 = limbs[ 3 ] >> BigInt( 51 );
-        let c4 = limbs[ 4 ] >> BigInt( 51 );
+        let c0 = limbs[ 0 ] >> _51n;
+        let c1 = limbs[ 1 ] >> _51n;
+        let c2 = limbs[ 2 ] >> _51n;
+        let c3 = limbs[ 3 ] >> _51n;
+        let c4 = limbs[ 4 ] >> _51n;
 
         limbs[ 0 ] &= LOW_51_BIT_MASK;
         limbs[ 1 ] &= LOW_51_BIT_MASK;
@@ -639,27 +670,26 @@ export class FieldElem51
         let c3: bigint = ( a[3] * b[0] ) + ( a[2] * b[1]  ) + ( a[1] * b[2]  ) + ( a[0] * b[3]  ) + ( a[4] * b4_19 );
         let c4: bigint = ( a[4] * b[0] ) + ( a[3] * b[1]  ) + ( a[2] * b[2]  ) + ( a[1] * b[3]  ) + ( a[0] * b[4]  );
 
-        const LOW_51_BIT_MASK: bigint = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
         let out: BigUint64Array = new BigUint64Array( 5 );
 
-        c1 += ( c0 >> BigInt( 51 ) );
+        c1 += ( c0 >> _51n );
         out[ 0 ] = c0 & LOW_51_BIT_MASK;
 
-        c2 += ( c1 >> BigInt( 51 ) );
+        c2 += ( c1 >> _51n );
         out[ 1 ] = c1 & LOW_51_BIT_MASK;
 
-        c3 += ( c2 >> BigInt( 51 ) );
+        c3 += ( c2 >> _51n );
         out[ 2 ] = c2 & LOW_51_BIT_MASK;
 
-        c4 += ( c3 >> BigInt( 51 ) );
+        c4 += ( c3 >> _51n );
         out[ 3 ] = c3 & LOW_51_BIT_MASK;
 
-        let carry: bigint = ( c4 >> BigInt( 51 ) );
+        let carry: bigint = ( c4 >> _51n );
         out[ 4 ] = c4 & LOW_51_BIT_MASK;
 
         out[ 0 ] = out[ 0 ] + carry * BigInt( 19 );
 
-        out[ 1 ] += out[ 0 ] >> BigInt( 51 );
+        out[ 1 ] += out[ 0 ] >> _51n;
         out[ 0 ] &= LOW_51_BIT_MASK;
 
         return new FieldElem51( out );
@@ -1096,22 +1126,21 @@ export class FieldElem51
     {
         const limbs = FieldElem51.reduce( this.bytes ).bytes.slice();
 
-        let q = ( limbs[ 0 ] + BigInt( 19 ) ) >> BigInt( 51 );
-        q = ( limbs[ 1 ] + q ) >> BigInt( 51 );
-        q = ( limbs[ 2 ] + q ) >> BigInt( 51 );
-        q = ( limbs[ 3 ] + q ) >> BigInt( 51 );
-        q = ( limbs[ 4 ] + q ) >> BigInt( 51 );
+        let q = ( limbs[ 0 ] + BigInt( 19 ) ) >> _51n;
+        q = ( limbs[ 1 ] + q ) >> _51n;
+        q = ( limbs[ 2 ] + q ) >> _51n;
+        q = ( limbs[ 3 ] + q ) >> _51n;
+        q = ( limbs[ 4 ] + q ) >> _51n;
 
         limbs[ 0 ] += BigInt( 19 ) * q;
 
-        const LOW_51_BIT_MASK: bigint = ( BigInt( 1 ) << BigInt( 51 ) ) - BigInt( 1 );
-        limbs[ 1 ] += limbs[ 0 ] >> BigInt( 51 );
+        limbs[ 1 ] += limbs[ 0 ] >> _51n;
         limbs[ 0 ] &= LOW_51_BIT_MASK;
-        limbs[ 2 ] += limbs[ 1 ] >> BigInt( 51 );
+        limbs[ 2 ] += limbs[ 1 ] >> _51n;
         limbs[ 1 ] &= LOW_51_BIT_MASK;
-        limbs[ 3 ] += limbs[ 2 ] >> BigInt( 51 );
+        limbs[ 3 ] += limbs[ 2 ] >> _51n;
         limbs[ 2 ] &= LOW_51_BIT_MASK;
-        limbs[ 4 ] += limbs[ 3 ] >> BigInt( 51 );
+        limbs[ 4 ] += limbs[ 3 ] >> _51n;
         limbs[ 3 ] &= LOW_51_BIT_MASK;
         limbs[ 4 ] &= LOW_51_BIT_MASK;
 
@@ -1146,7 +1175,7 @@ export class FieldElem51
         s[16 ] = Number( ( limbs[ 2 ] >> BigInt( 26 ) )                                 & BigInt( 0xff ) );
         s[17 ] = Number( ( limbs[ 2 ] >> BigInt( 34 ) )                                 & BigInt( 0xff ) );
         s[18 ] = Number( ( limbs[ 2 ] >> BigInt( 42 ) )                                 & BigInt( 0xff ) );
-        s[19 ] = Number( ( limbs[ 2 ] >> BigInt( 50 ) ) | ( limbs[ 3 ] << BigInt( 1 ) ) & BigInt( 0xff ) );
+        s[19 ] = Number( ( limbs[ 2 ] >> BigInt( 50 ) ) | ( limbs[ 3 ] << _1n ) & BigInt( 0xff ) );
 
         s[20 ] = Number( ( limbs[ 3 ] >> BigInt( 7  ) )                                 & BigInt( 0xff ) );
         s[21 ] = Number( ( limbs[ 3 ] >> BigInt( 15 ) )                                 & BigInt( 0xff ) );
@@ -2288,9 +2317,6 @@ export class LookupTableProjectiveNielsPoint
     */
     select( pos: number ): ProjectiveNielsPoint
     {
-        // console.assert( pos >= 0 );
-        // console.assert( pos < this.points.length );
-
         const view = new DataView( new ArrayBuffer( 2 ) );
         view.setUint16( 0, pos & 0xffff, false );
         const posI16 = view.getInt16( 0, false );
@@ -2349,7 +2375,6 @@ pub(crate) fn to_radix_16(&self) -> [i8; 64] {
 */
 function scalar_to_radix_16( scalar: Uint8Array ): Int8Array
 {
-    // console.assert( scalar[ 31 ] <= 127 );
     const output = new Int8Array( 64 );
     const u8 = new Uint8Array( output.buffer );
 
@@ -2665,12 +2690,12 @@ export function add_scalars( a: Uint8Array, b: Uint8Array ): Uint8Array
 function unpacked_scalar_add( a: BigUint64Array, b: BigUint64Array ): BigUint64Array
 {
     let sum = SCALAR_0.slice();
-    const mask = (BigInt(1) << BigInt(52)) - BigInt(1);
+    const mask = LOW_52_BIT_MASK;
 
-    let carry = BigInt(0);
+    let carry = _0n;
     for( let i = 0; i < 5; i++ )
     {
-        carry = a[i] + b[i] + (carry >> BigInt(52));
+        carry = a[i] + b[i] + (carry >> _52n);
         sum[i] = carry & mask;
     }
 
@@ -2711,12 +2736,12 @@ function unpacked_scalar_from_bytes( input: Uint8Array ): BigUint64Array
         }
     }
 
-    const mask = (BigInt(1) << BigInt(52)) - BigInt(1);
-    const top_mask = (BigInt(1) << BigInt(48)) - BigInt(1);
+    const mask = LOW_52_BIT_MASK;
+    const top_mask = (_1n << BigInt(48)) - _1n;
     const s = SCALAR_0.slice();
 
     s[ 0] =   words[0]                                            & mask;
-    s[ 1] = ((words[0] >> BigInt(52)) | (words[1] << BigInt(12))) & mask;
+    s[ 1] = ((words[0] >> _52n)       | (words[1] << BigInt(12))) & mask;
     s[ 2] = ((words[1] >> BigInt(40)) | (words[2] << BigInt(24))) & mask;
     s[ 3] = ((words[2] >> BigInt(28)) | (words[3] << BigInt(36))) & mask;
     s[ 4] = ( words[3] >> BigInt(16))                             & top_mask;
@@ -2784,12 +2809,12 @@ export function unpacked_scalar_from_bytes_wide( input: Uint8Array ): BigUint64A
         }
     }
 
-    const mask = (BigInt(1) << BigInt(52)) - BigInt(1);
+    const mask = LOW_52_BIT_MASK;
     let lo = new BigUint64Array(5);
     let hi = new BigUint64Array(5);
 
     lo[0] =   words[0]                                             & mask;
-    lo[1] = ((words[0] >> BigInt(52)) | (words[ 1] << BigInt(12))) & mask;
+    lo[1] = ((words[0] >> _52n)       | (words[ 1] << BigInt(12))) & mask;
     lo[2] = ((words[1] >> BigInt(40)) | (words[ 2] << BigInt(24))) & mask;
     lo[3] = ((words[2] >> BigInt(28)) | (words[ 3] << BigInt(36))) & mask;
     lo[4] = ((words[3] >> BigInt(16)) | (words[ 4] << BigInt(48))) & mask;
@@ -2841,12 +2866,12 @@ const SCALAR_RR: BigUint64Array = new BigUint64Array([
 function scalar_52_add( a: BigUint64Array, b: BigUint64Array ): BigUint64Array
 {
     const sum = SCALAR_0.slice();
-    const mask = (BigInt(1) << BigInt(52)) - BigInt(1);
+    const mask = LOW_52_BIT_MASK;
 
-    let carry = BigInt(0);
+    let carry = _0n;
     for( let i = 0; i < 5; i++ )
     {
-        carry = a[i] + b[i] + (carry >> BigInt(52));
+        carry = a[i] + b[i] + (carry >> _52n);
         sum[i] = carry & mask;
     }
 
@@ -2915,33 +2940,35 @@ function scalar_montgomery_reduce( limbs: bigint[] & { length: 9 } ): BigUint64A
     [carry, r1] = smr_part2( carry + limbs[6]                                 + ( n2 * l[4] )                 + ( n4 * l[2] ) );
     [carry, r2] = smr_part2( carry + limbs[7]                                                 + ( n3 * l[4] )                 );
     [carry, r3] = smr_part2( carry + limbs[8]                                                                 + ( n4 * l[4] ) );
-            r4 = carry & ( (BigInt(1) << BigInt(64)) - BigInt(1) );
+            r4 = carry & LOW_64_BIT_MASK;
 
     return scalar_sub( new BigUint64Array([r0, r1, r2, r3, r4]), l );
 }
 
 function smr_part1( sum: bigint ): [bigint, bigint]
 {
-    const p = rust_u64_wrapping_mul(sum, LFACTOR) & ( (BigInt(1) << BigInt(52)) - BigInt( 1 ) );
+    const p = rust_u64_wrapping_mul(sum, LFACTOR) & LOW_52_BIT_MASK;
     return [
-        (sum + ( p * SCALAR_L[0] )) >> BigInt( 52 ),
+        (sum + ( p * SCALAR_L[0] )) >> _52n,
         p
     ];
 }
 
 function smr_part2( sum: bigint ): [bigint, bigint]
 {
-    const w = sum & ( (BigInt(1) << BigInt(52)) - BigInt( 1 ) );
+    const w = sum & LOW_52_BIT_MASK;
     return [
-        sum >> BigInt( 52 ),
+        sum >> _52n,
         w
     ];
 }
 
+const U64_PLUS_ONE = _1n << _64n;
+
 function rust_u64_wrapping_mul( a: bigint, b: bigint ): bigint
 {
     // Convert inputs to BigInt and perform multiplication
-    return (a * b) % (BigInt(1) << BigInt(64));
+    return (a * b) % U64_PLUS_ONE;
 }
 
 /*
@@ -2971,9 +2998,9 @@ function rust_u64_wrapping_mul( a: bigint, b: bigint ): bigint
 function scalar_sub( a: BigUint64Array, b: BigUint64Array ): BigUint64Array
 {
     let difference = SCALAR_0.slice();
-    const mask = (BigInt(1) << BigInt(52)) - BigInt(1);
+    const mask = LOW_52_BIT_MASK;
 
-    let borrow = BigInt(0);
+    let borrow = _0n;
     for( let i = 0; i < 5; i++ )
     {
         borrow = rust_u64_wrapping_sub( a[i], ( b[i] + ( borrow >> BigInt(63) ) ) );
@@ -2981,11 +3008,11 @@ function scalar_sub( a: BigUint64Array, b: BigUint64Array ): BigUint64Array
     }
 
     // conditionally add l if the difference is negative
-    const underflow_mask = rust_u64_wrapping_sub( ( borrow >> BigInt(63) ) ^ BigInt(1), BigInt(1) );
-    let carry = BigInt(0);
+    const underflow_mask = rust_u64_wrapping_sub( ( borrow >> BigInt(63) ) ^ _1n, _1n );
+    let carry = _0n;
     for( let i = 0; i < 5; i++ )
     {
-        carry = (carry >> BigInt(52)) + difference[i] + ( SCALAR_L[i] & underflow_mask );
+        carry = (carry >> _52n) + difference[i] + ( SCALAR_L[i] & underflow_mask );
         difference[i] = carry & mask;
     }
 
@@ -2998,22 +3025,22 @@ function scalar_sub( a: BigUint64Array, b: BigUint64Array ): BigUint64Array
  * ```
 */
 function rust_u64_wrapping_sub(self: bigint, rhs: bigint) {
-    const U64_MAX = (BigInt(1) << BigInt(64)) - BigInt(1); // 2^64 - 1, max value of u64
+    const U64_MAX = LOW_64_BIT_MASK; // 2^64 - 1, max value of u64
 
     // Convert inputs to BigInt
     let result = BigInt(self) - BigInt(rhs);
 
     // Wrap around if out of bounds
-    if (result < BigInt(0)) {
-        result += U64_MAX + BigInt(1); // Wrap from negative to upper bound
+    if (result < _0n) {
+        result += U64_MAX + _1n; // Wrap from negative to upper bound
     } else if (result > U64_MAX) {
-        result %= U64_MAX + BigInt(1); // Wrap around on overflow
+        result %= U64_MAX + _1n; // Wrap around on overflow
     }
 
     return result;
 }
 
-const SCALAR_0 = new BigUint64Array( 5 ).fill( BigInt(0) )
+const SCALAR_0 = new BigUint64Array( 5 ).fill( _0n )
 
 const SCALAR_L = new BigUint64Array([
     BigInt( "0x0002631a5cf5d3ed" ),
@@ -3111,7 +3138,7 @@ export function pack_unpacked_scalar( input: BigUint64Array ): Uint8Array
     const s = new Uint8Array( 32 );
     const u8mask = BigInt( 0xff );
 
-    s[0 ] = Number( (input[0] >> BigInt( 0))                            & u8mask);
+    s[0 ] = Number( (input[0] >> _0n)                                   & u8mask);
     s[1 ] = Number( (input[0] >> BigInt( 8))                            & u8mask);
     s[2 ] = Number( (input[0] >> BigInt(16))                            & u8mask);
     s[3 ] = Number( (input[0] >> BigInt(24))                            & u8mask);
@@ -3126,7 +3153,7 @@ export function pack_unpacked_scalar( input: BigUint64Array ): Uint8Array
     s[11] = Number( (input[1] >> BigInt(36))                            & u8mask);
     s[12] = Number( (input[1] >> BigInt(44))                            & u8mask);
 
-    s[13] = Number( (input[2] >> BigInt( 0))                            & u8mask);
+    s[13] = Number( (input[2] >> _0n)                            & u8mask);
     s[14] = Number( (input[2] >> BigInt( 8))                            & u8mask);
     s[15] = Number( (input[2] >> BigInt(16))                            & u8mask);
     s[16] = Number( (input[2] >> BigInt(24))                            & u8mask);
@@ -3141,7 +3168,7 @@ export function pack_unpacked_scalar( input: BigUint64Array ): Uint8Array
     s[24] = Number( (input[3] >> BigInt(36))                            & u8mask);
     s[25] = Number( (input[3] >> BigInt(44))                            & u8mask);
 
-    s[26] = Number( (input[4] >> BigInt( 0))                            & u8mask);
+    s[26] = Number( (input[4] >> _0n)                            & u8mask);
     s[27] = Number( (input[4] >> BigInt( 8))                            & u8mask);
     s[28] = Number( (input[4] >> BigInt(16))                            & u8mask);
     s[29] = Number( (input[4] >> BigInt(24))                            & u8mask);
@@ -3249,11 +3276,11 @@ function scalar_non_adjacent_form( scalar: Uint8Array, w: number ): Int8Array
     // LittleEndian::read_u64_into(&self.bytes, &mut x_u64[0..4]);
     read_u64_into_LE( scalar, x_u64, 4 );
 
-    const width = BigInt(1) << BigInt(w);
-    const window_mask = width - BigInt(1);
+    const width = _1n << BigInt(w);
+    const window_mask = width - _1n;
 
     let pos = 0;
-    let carry = BigInt(0);
+    let carry = _0n;
     while( pos < 256 )
     {
         let u64_idx = (pos / 64) >>> 0;
@@ -3266,7 +3293,7 @@ function scalar_non_adjacent_form( scalar: Uint8Array, w: number ): Int8Array
 
         const window = carry + (bit_buf & window_mask);
 
-        if( (window & BigInt(1)) === BigInt(0) )
+        if( (window & _1n) === _0n )
         {
             // If the window value is even, preserve the carry and continue.
             // Why is the carry preserved?
@@ -3278,12 +3305,12 @@ function scalar_non_adjacent_form( scalar: Uint8Array, w: number ): Int8Array
 
         if( window < (width / BigInt(2)) )
         {
-            carry = BigInt(0);
+            carry = _0n;
             naf_u8[pos] = Number(window) & 0xff;
         }
         else
         {
-            carry = BigInt(1);
+            carry = _1n;
             naf_u8[pos] = (Number(window) - Number(width)) & 0xff;
         }
 
