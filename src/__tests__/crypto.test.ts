@@ -178,10 +178,12 @@ describe("src/crypto", () => {
 
         function test_eq_224( data: byte[] ): void
         {
-            const expected = blake2.createHash('blake2b',{digestLength:28})
+            
+            const received = uint8array.toHex( blake2b_224( data ) );
+            const expected =  
+            blake2.createHash('blake2b',{digestLength:28})
                 .update(Buffer.from(data))
                 .digest("hex");
-            const received = uint8array.toHex( blake2b_224( data ) );
 
             if( received !== expected )
             throw bytesToHex( data );

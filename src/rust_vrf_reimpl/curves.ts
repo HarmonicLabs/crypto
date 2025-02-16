@@ -1445,6 +1445,13 @@ export class EdwardsPoint
         readonly T: FieldElem51
     ) {}
 
+    equals( other: EdwardsPoint ): boolean
+    {
+        return this.X.ct_eq( other.X )
+            && this.Y.ct_eq( other.Y )
+            && this.Z.ct_eq( other.Z )
+            && this.T.ct_eq( other.T );
+    }
 
     static get DOUBLE_BASE_COMPRESSED(): Uint8Array
     {

@@ -86,7 +86,7 @@ export function vrf_ed25519_sha512_ell2_generate_proof(
     const compressed_h = h.compress();
 
     const gamma = h.scalarMul( secret_scalar );
-    const compressed_gamma = gamma.clone().compress();
+    const compressed_gamma = gamma.compress();
 
     const k = vrf_ed25519_sha512_ell2_nonce_generation( secret_extension, compressed_h );
 

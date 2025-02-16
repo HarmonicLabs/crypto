@@ -26,6 +26,12 @@ MGF_salt = I2OSP(k, 4) || I2OSP(n, k).
  */
 const SUITE = 0x04;
 
+/*
+/// Temporary SUITE identifier, as TAI uses 0x03
+pub const SUITE_TEMP: &[u8] = &[0x03];
+*/
+const SUITE_TEMP = 0x03;
+
 const ONE = 0x01;
 const TWO = 0x02;
 
@@ -74,7 +80,7 @@ export function adjust_scalar_bits( bytes: Uint8Array ): void
     bytes[31] &= 0b0111_1111;
 }
 
-export function vrf_ed25519_sha512_ell2_generate_proof(
+export function vrf10_ed25519_sha512_ell2_generate_proof(
     secret_key: Uint8Array,
     public_key: Uint8Array,
     alpha_string: Uint8Array
@@ -82,20 +88,20 @@ export function vrf_ed25519_sha512_ell2_generate_proof(
 {
     const [ secret_scalar, secret_extension ] = extend_secret_key( secret_key );
 
-    const h = vrf_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
+    const h = vrf10_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
     const compressed_h = h.compress();
 
     const gamma = h.scalarMul( secret_scalar );
-    const compressed_gamma = gamma.clone().compress();
+    const compressed_gamma = gamma.compress();
 
-    const k = vrf_ed25519_sha512_ell2_nonce_generation( secret_extension, compressed_h );
+    const k = vrf10_ed25519_sha512_ell2_nonce_generation( secret_extension, compressed_h );
 
     const compressed_announcement_base = ED25519_BASEPOINT_POINT.scalarMul( k ).compress();
     const compressed_announcement_h = h.scalarMul( k ).compress();
 
     // Self::compute_challenge(&compressed_h, &gamma, &announcement_base, &announcement_h);
     const challenge: Uint8Array =
-    vrf_ed25519_sha512_ell2_compute_challenge(
+    vrf10_ed25519_sha512_ell2_compute_challenge(
         compressed_h,
         compressed_gamma,
         compressed_announcement_base,
@@ -150,13 +156,13 @@ export function vrf_ed25519_sha512_ell2_generate_proof(
         }
     }
 */
-export function vrf_ed25519_sha512_ell2_verify_proof(
+export function vrf10_ed25519_sha512_ell2_verify_proof(
     public_key: Uint8Array,
     alpha_string: Uint8Array,
     proof: IVrfProof10
 ): boolean
 {
-    const h = vrf_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
+    const h = vrf10_ed25519_sha512_ell2_hash_to_curve( public_key, alpha_string );
     const compressed_h = h.compress();
 
     const decompressed_pk = decompressCompressedEdwardsY( public_key );// pointFromBytes( public_key );
@@ -183,7 +189,7 @@ export function vrf_ed25519_sha512_ell2_verify_proof(
         [ h, gamma ]
     );
 
-    const computed_challenge = vrf_ed25519_sha512_ell2_compute_challenge(
+    const computed_challenge = vrf10_ed25519_sha512_ell2_compute_challenge(
         compressed_h,
         proof.gamma.compress(),
         U.compress(),
@@ -199,27 +205,29 @@ export function vrf_ed25519_sha512_ell2_verify_proof(
 /*
 /// `proof_to_hash` function, following the 10 specification. This computes the output of the VRF
     /// function. In particular, this function computes
-    /// SHA512(SUITE || THREE || Gamma)
-    pub fn proof_to_hash(&self) -> [u8; OUTPUT_SIZE] {
+    /// SHA512(SUITE || THREE || Gamma || ZERO)
+    fn proof_to_hash(&self) -> [u8; OUTPUT_SIZE] {
         let mut output = [0u8; OUTPUT_SIZE];
         let gamma_cofac = self.gamma.mul_by_cofactor();
         let mut hash = Sha512::new();
-        hash.update(SUITE);
+        hash.update(SUITE_TEMP);
         hash.update(THREE);
         hash.update(gamma_cofac.compress().as_bytes());
+        hash.update(ZERO);
 
         output.copy_from_slice(hash.finalize().as_slice());
         output
     }
-
 */
-export function proof_to_hash( proof: IVrfProof10 ): Uint8Array & { length: 64 }
+export function vrf10_proof_to_hash( proof: IVrfProof10 ): Uint8Array & { length: 64 }
 {
-    const gamma_cofac = proof.gamma.mul_by_cofactor();
-    const hashInput = new Uint8Array( 2 + gamma_cofac.compress().length );
-    hashInput[0] = SUITE;
-    hashInput[1] = 0x10;
-    hashInput.set( gamma_cofac.compress(), 2 );
+    const compressed_gamma_cofac = proof.gamma.mul_by_cofactor().compress();
+    const hashInput = new Uint8Array( 3 + compressed_gamma_cofac.length );
+    hashInput[0] = SUITE_TEMP;
+    hashInput[1] = 0x03;
+    hashInput.set( compressed_gamma_cofac, 2 );
+    hashInput[2 + compressed_gamma_cofac.length] = 0;
+
     return sha2_512_sync( hashInput );
 }
 
@@ -278,16 +286,77 @@ export function edwards_hash_from_bytes( bytes: Uint8Array ): EdwardsPoint
     return E1_opt.mul_by_cofactor();
 }
 
-export function vrf_ed25519_sha512_ell2_hash_to_curve(
+/*
+/// Computing the `hash_to_curve` using try and increment. In order to make the
+    /// function always terminate, we bound  the number of tries to 64. If the try
+    /// 64 fails, which happens with probability around 1/2^64, we compute the
+    /// Elligator mapping. This diverges from the standard: the latter describes
+    /// the function with an infinite loop. To avoid infinite loops or possibly
+    /// non-terminating functions, we adopt this modification.
+    /// This function is temporary, until `curve25519` provides a `hash_to_curve` as
+    /// presented in the standard. Depends on
+    /// [this pr](https://github.com/dalek-cryptography/curve25519-dalek/pull/377). The
+    /// goal of providing this temporary function, is to ensure that the rest of the
+    /// implementation is valid with respect to the standard, by using their test-vectors.
+    pub(crate) fn hash_to_curve(public_key: &PublicKey10, alpha_string: &[u8]) -> EdwardsPoint {
+        let mut counter = 0u8;
+        let mut hash_input = Vec::with_capacity(4 + PUBLIC_KEY_SIZE + alpha_string.len());
+        hash_input.extend_from_slice(SUITE_TEMP);
+        hash_input.extend_from_slice(ONE);
+        hash_input.extend_from_slice(public_key.as_bytes());
+        hash_input.extend_from_slice(alpha_string);
+        hash_input.extend_from_slice(&counter.to_be_bytes());
+        hash_input.extend_from_slice(ZERO);
+
+        while counter < 64 {
+            hash_input[2 + PUBLIC_KEY_SIZE + alpha_string.len()] = counter.to_be_bytes()[0];
+            if let Some(result) =
+                CompressedEdwardsY::from_slice(&Sha512::digest(&hash_input)[..32]).decompress()
+            {
+                return result.mul_by_cofactor();
+            };
+
+            counter += 1;
+        }
+
+        EdwardsPoint::hash_from_bytes::<Sha512>(&hash_input)
+    }
+*/
+/**
+ * Computing the `hash_to_curve` using try and increment. In order to make the
+ * function always terminate, we bound  the number of tries to 64. If the try
+ * 64 fails, which happens with probability around 1/2^64, we compute the
+ * Elligator mapping. This diverges from the standard: the latter describes
+ * the function with an infinite loop. To avoid infinite loops or possibly
+ * non-terminating functions, we adopt this modification.
+ * This function is temporary, until `curve25519` provides a `hash_to_curve` as
+ * presented in the standard. Depends on
+ * [this pr](https://github.com/dalek-cryptography/curve25519-dalek/pull/377). The
+ * goal of providing this temporary function, is to ensure that the rest of the
+ * implementation is valid with respect to the standard, by using their test-vectors.
+**/
+export function vrf10_ed25519_sha512_ell2_hash_to_curve(
     public_key: Uint8Array,
     alpha_string: Uint8Array
 ): EdwardsPoint 
 {
-    const input = new Uint8Array(2 + public_key.length + alpha_string.length);
-    input[0] = SUITE;
+    let counter_u8 = 0;
+    const input = new Uint8Array(4 + 32 + alpha_string.length);
+    input[0] = SUITE_TEMP;
     input[1] = ONE;
-    input.set(public_key, 2);
-    input.set(alpha_string, 2 + public_key.length);
+    input.set(public_key.slice(0,32), 2);
+    input.set(alpha_string, 34);
+    input[34 + alpha_string.length] = counter_u8;
+    input[35 + alpha_string.length] = 0;
+
+    while( counter_u8 < 64 )
+    {
+        input[34 + alpha_string.length] = counter_u8;
+        const result = decompressCompressedEdwardsY( sha2_512_sync( input ).slice(0,32) );
+        if( result ) return result.mul_by_cofactor();
+        ++counter_u8;
+    }
+
     return edwards_hash_from_bytes( input ); // sha2_512_sync(input);
 }
 
@@ -296,14 +365,14 @@ export function scalar_hash_from_bytes( input: Uint8Array ): Uint8Array
     return scalar_from_bytes_mod_order_wide( sha2_512_sync( input ) );
 }
 
-export function vrf_ed25519_sha512_ell2_nonce_generation(
+export function vrf10_ed25519_sha512_ell2_nonce_generation(
     secret_extension: Uint8Array,
     compressed_h: Uint8Array,
 ): Uint8Array
 {
     const input = new Uint8Array( 64 );
-    input.set( secret_extension, 0 );
-    input.set( compressed_h, 32 );
+    input.set( secret_extension.slice(0,32), 0 );
+    input.set( compressed_h.slice(0,32), 32 );
     //return pointFromBytes(sha2_512_sync(input))
     return scalar_hash_from_bytes(input);
 }
@@ -350,7 +419,32 @@ export function vrf_ed25519_sha512_ell2_challenge_generation(
 }
 //*/
 
-export function vrf_ed25519_sha512_ell2_compute_challenge(
+/*
+/// Hash points function, following the 10 specification.
+    pub(crate) fn compute_challenge(
+        compressed_h: &CompressedEdwardsY,
+        gamma: &EdwardsPoint,
+        announcement_1: &EdwardsPoint,
+        announcement_2: &EdwardsPoint,
+    ) -> Scalar {
+        // we use a scalar of 16 bytes (instead of 32), but store it in 32 bits, as that is what
+        // `Scalar::from_bits()` expects.
+        let mut scalar_bytes = [0u8; 32];
+        let mut challenge_hash = Sha512::new();
+        challenge_hash.update(SUITE_TEMP);
+        challenge_hash.update(TWO);
+        challenge_hash.update(compressed_h.to_bytes());
+        challenge_hash.update(gamma.compress().as_bytes());
+        challenge_hash.update(announcement_1.compress().as_bytes());
+        challenge_hash.update(announcement_2.compress().as_bytes());
+        challenge_hash.update(ZERO);
+
+        scalar_bytes[..16].copy_from_slice(&challenge_hash.finalize().as_slice()[..16]);
+
+        Scalar::from_bits(scalar_bytes)
+    }
+*/
+export function vrf10_ed25519_sha512_ell2_compute_challenge(
     compressed_h: Uint8Array,
     compressed_gamma: Uint8Array,
     compressed_announcement_1: Uint8Array,
@@ -359,18 +453,23 @@ export function vrf_ed25519_sha512_ell2_compute_challenge(
 {
     const scalar_bytes = new Uint8Array( 32 );
     const hash_input = new Uint8Array(
-        2 +
+        3 +
         compressed_h.length +
         compressed_gamma.length +
         compressed_announcement_1.length +
         compressed_announcement_2.length
     );
-    hash_input[0] = SUITE;
+    hash_input[0] = SUITE_TEMP;
     hash_input[1] = TWO;
-    hash_input.set( compressed_h, 2 );
-    hash_input.set( compressed_gamma, 2 + compressed_h.length );
-    hash_input.set( compressed_announcement_1, 2 + compressed_h.length + compressed_gamma.length );
-    hash_input.set( compressed_announcement_2, 2 + compressed_h.length + compressed_gamma.length + compressed_announcement_1.length );
+    let len = 2;
+    hash_input.set( compressed_h, len );
+    len += compressed_h.length;
+    hash_input.set( compressed_gamma, len );
+    len += compressed_gamma.length;
+    hash_input.set( compressed_announcement_1, len );
+    len += compressed_announcement_1.length;
+    hash_input.set( compressed_announcement_2, len);
+    hash_input[len + compressed_announcement_2.length] = 0;
     
     const hash = sha2_512_sync( hash_input );
     scalar_bytes.set( hash.slice(0,16), 0 );
