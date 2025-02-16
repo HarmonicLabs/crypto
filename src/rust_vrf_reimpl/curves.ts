@@ -1727,12 +1727,14 @@ export class EdwardsPoint
     */
     static vartime_multiscalar_mul( scalars: Uint8Array[], points: EdwardsPoint[] ): EdwardsPoint // | undefined
     {
-        // it seems pippenger only works for 190+ elements
+        return straus_optional_multiscalar_mul( scalars, points );
 
-        if( scalars.length < 190 )
-            return straus_optional_multiscalar_mul( scalars, points );
-        else
-            return pippenger_optional_multiscalar_mul( scalars, points );
+        // pippenger impl is wrong
+
+        // if( scalars.length < 190 )
+        //     return straus_optional_multiscalar_mul( scalars, points );
+        // else
+        //     return pippenger_optional_multiscalar_mul( scalars, points );
     }
 
     double(): EdwardsPoint

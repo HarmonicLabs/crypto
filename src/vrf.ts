@@ -333,6 +333,9 @@ export interface IBatchItem {
     // output: Uint8Array;
 }
 
+/** for some reason, from 38 elems up it fails */
+const MAX_BATCH_SIZE = 37;
+
 export class VrfBatchVerifier
 {
     readonly proof_scalars: [Uint8Array, Uint8Array][];
