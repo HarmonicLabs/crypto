@@ -1438,7 +1438,7 @@ function pippenger_optional_multiscalar_mul(
     const points_proj = points.map( p => p.toProjectiveNiels() );
 
     // zipped
-    const scalars_points: [Int8Array<ArrayBufferLike> & { length: 64 }, ProjectiveNielsPoint][] =
+    const scalars_points: [Int8Array & { length: 64 }, ProjectiveNielsPoint][] =
         scalras_digits.map( ( s, i ) => [ s, points_proj[ i ] ] );
 
     // all elems will be replaced in `columns` loop, just a temp value
