@@ -158,7 +158,7 @@ export function decodeBech32(addr: string): [humanReadablePart: string, bytes: b
 {
     assert( isBech32(addr), "invalid bech32 addr");
 
-    let i = addr.indexOf("1");
+    let i = addr.lastIndexOf("1");
 
     assert(i != -1, "bech32 address missing the '1' separator");
 
