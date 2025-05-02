@@ -6,7 +6,7 @@ import { assert } from "./utils/assert";
 /**
  * Expand human readable prefix of the bech32 encoding so it can be used in the checkSum
  */
-export function expandBech32HumanReadablePart(hrp: string): byte[] 
+export function expandBech32HumanReadablePart(hrp: string): byte[]
 {
     let bytes = [];
     for (let c of hrp) {
@@ -76,11 +76,11 @@ export function encodeBech32(humanReadablePart: string, data: byte[] | Uint8Arra
 {
     assert(humanReadablePart.length > 0, "human-readable-part must have non-zero length");
 
-    const _data = buffToUint5Arr( 
+    const _data = buffToUint5Arr(
         isUint8Array(data) ? data : new Uint8Array(data)
     );
 
-    return humanReadablePart + "1" + 
+    return humanReadablePart + "1" +
         _data.concat(
             getBech32Checksum(
                 humanReadablePart,
@@ -114,7 +114,7 @@ export function encodeBech32(humanReadablePart: string, data: byte[] | Uint8Arra
 export function isBech32(addr: string): boolean
 {
 
-    let i = addr.indexOf("1");
+    let i = addr.lastIndexOf("1");
     if (i == -1 || i == 0) {
         return false;
     }
@@ -151,7 +151,7 @@ export function isBech32(addr: string): boolean
  * Throws an error if checksum is invalid.
  * @example
  * bytesToHex(decodeBech32("addr_test1wz54prcptnaullpa3zkyc8ynfddc954m9qw5v3nj7mzf2wggs2uld")[1]) => "70a9508f015cfbcffc3d88ac4c1c934b5b82d2bb281d464672f6c49539"
- * @param {string} addr 
+ * @param {string} addr
  * @returns {[humanReadablePart: string, bytes: byte[]]}
  */
 export function decodeBech32(addr: string): [humanReadablePart: string, bytes: byte[]]
