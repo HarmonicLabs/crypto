@@ -22,9 +22,9 @@ export function encodeBase32rfc4648(bytes: Uint8Array)
     return buffToUint5Arr(bytes).map(c => rfc4648_ALPHABET[c]).join("");
 }
 
-function decodeBase32( base32Str: string, alpabeth: typeof BECH32_BASE32_ALPHABET | typeof rfc4648_ALPHABET )
+function decodeBase32( base32Str: string, alphabet: typeof BECH32_BASE32_ALPHABET | typeof rfc4648_ALPHABET )
 {
-    if( !Array.from( base32Str ).every( ch => alpabeth.includes( ch as any ) ) )
+    if( !Array.from( base32Str ).every( ch => alphabet.includes( ch as any ) ) )
     throw new Error(
         "can't decode base32 a string that is not in base32 (rfc 4648); string was: " + base32Str
     );
@@ -35,7 +35,7 @@ function decodeBase32( base32Str: string, alpabeth: typeof BECH32_BASE32_ALPHABE
 
     for (let i = 0; i < len - 1; i++)
     {    
-        const num = alpabeth.indexOf(
+        const num = alphabet.indexOf(
             base32Str[i].toLowerCase() as any
         );
 
@@ -44,7 +44,7 @@ function decodeBase32( base32Str: string, alpabeth: typeof BECH32_BASE32_ALPHABE
     // last, make sure we align to byte
     let nCut = len*5 - 8*Math.floor(len*5/8);
 
-    const num = alpabeth.indexOf(
+    const num = alphabet.indexOf(
         base32Str[len - 1].toLowerCase() as any
     );
     let lastbits = num.toString(2).padStart( 5, '0' );
