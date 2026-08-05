@@ -1048,7 +1048,8 @@ const COMPRESSED_ZERO = setMask(Fp.toBytes(_0n), { infinity: true, compressed: t
 
 export function parseMask(bytes: Uint8Array) {
   // Copy, so we can remove mask data. It will be removed also later, when Fp.create will call modulo.
-  bytes = bytes.slice();
+  // NOTE: must be a real copy even for Node Buffers (Buffer#slice returns a view, not a copy)
+  bytes = Uint8Array.prototype.slice.call( bytes );
   const mask = bytes[0] & 0b1110_0000;
   const compressed = !!((mask >> 7) & 1); // compression bit (0b1000_0000)
   const infinity = !!((mask >> 6) & 1); // point at infinity bit (0b0100_0000)
